@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import JSZip from 'jszip';
-import { saveAs } from 'file-saver';
+import LicenceEditor from './LicenceEditor';
+import licencesData from './licences.json';
 
-interface Licence {
+
+
+export interface Licence {
   licenceId: string;
   nom: string;
   valideJusqu: string;
@@ -20,177 +22,152 @@ interface Licence {
 }
 
 const App = () => {
+  const [licences, setLicences] = useState<Licence[]>([]);
+  const [editing, setEditing] = useState<number | null>(null);
   const [form, setForm] = useState<Licence>({
     licenceId: '',
     nom: '',
     valideJusqu: '',
     cachet: '',
-    fonctions: { avance: false, video: false, profil: false, ia: false },
+    fonctions: {
+      avance: false,
+      video: false,
+      profil: false,
+      ia: false,
+    },
     verresProgressifs: false,
     verresSpeciaux: false,
     traitements: false,
     selectedApp: 'OptiMesure',
   });
+
   const [selectedApp, setSelectedApp] = useState('OptiMesure');
-  const [logo, setLogo] = useState<File | null>(null);
-  const [licences, setLicences] = useState<Licence[]>([]);
-  const [editIndex, setEditIndex] = useState<number | null>(null);
-
-  const handleSendToDrive = async () => {
-  try {
-    const response = await fetch('http://localhost:3001/upload-licence', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    });
-    const result = await response.text();
-
-    alert(result.message || 'Licence envoyée avec succès !');
-  } catch (error) {
-    console.error('Erreur lors de l’envoi à Google Drive :', error);
-    alert('Échec de l’envoi de la licence.');
-  }
-};
 
   useEffect(() => {
-    const saved = localStorage.getItem('licences');
-    if (saved) {
-      setLicences(JSON.parse(saved));
-    }
+    setLicences(licencesData as Licence[]);
+
   }, []);
 
-  const saveLocally = (newLicences: Licence[]) => {
-    localStorage.setItem('licences', JSON.stringify(newLicences));
-  };
-
-  const handleInput = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value, type, checked } = e.target;
-    if (name === 'selectedApp') {
-      setSelectedApp(value);
-      setForm((f) => ({ ...f, selectedApp: value }));
-    } else if (['avance', 'video', 'profil', 'ia'].includes(name)) {
-      setForm((f) => ({
-        ...f,
-        fonctions: { ...f.fonctions, [name]: checked },
-      }));
-    } else if (['verresProgressifs', 'verresSpeciaux', 'traitements'].includes(name)) {
-      setForm((f) => ({ ...f, [name]: checked }));
+  useEffect(() => {
+    if (editing !== null) {
+      setForm(licences[editing]);
+      setSelectedApp(licences[editing].selectedApp);
     } else {
-      setForm((f) => ({ ...f, [name]: type === 'checkbox' ? checked : value }));
+      resetForm();
     }
-  };
+  }, [editing]);
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setLogo(e.target.files[0]);
-    }
-  };
-
-  const handleDownload = async () => {
-    const zip = new JSZip();
-    const licenceData = JSON.stringify(form, null, 2);
-    zip.file('licence.json', licenceData);
-
-    if (logo) {
-      const imgData = await logo.arrayBuffer();
-      zip.file('logo.png', imgData);
-    }
-
-    const blob = await zip.generateAsync({ type: 'blob' });
-    saveAs(blob, `licence_${form.licenceId}.zip`);
-
-    if (editIndex !== null) {
-      const updated = [...licences];
-      updated[editIndex] = form;
-      setLicences(updated);
-      saveLocally(updated);
-      setEditIndex(null);
-    } else {
-      const updated = [...licences, form];
-      setLicences(updated);
-      saveLocally(updated);
-    }
-
+  const resetForm = () => {
     setForm({
       licenceId: '',
       nom: '',
       valideJusqu: '',
       cachet: '',
-      fonctions: { avance: false, video: false, profil: false, ia: false },
+      fonctions: {
+        avance: false,
+        video: false,
+        profil: false,
+        ia: false,
+      },
       verresProgressifs: false,
       verresSpeciaux: false,
       traitements: false,
-      selectedApp: selectedApp,
+      selectedApp: 'OptiMesure',
     });
-    setLogo(null);
+    setSelectedApp('OptiMesure');
   };
 
-  const handleEdit = (index: number) => {
-    setForm(licences[index]);
-    setSelectedApp(licences[index].selectedApp);
-    setEditIndex(index);
-  };
-
-  const handleDelete = (index: number) => {
-    const confirm = window.confirm("Supprimer cette licence ?");
-    if (confirm) {
-      const updated = licences.filter((_, i) => i !== index);
-      setLicences(updated);
-      saveLocally(updated);
+  const handleInput = (e: React.ChangeEvent<any>) => {
+    const { name, value, type, checked } = e.target;
+    if (['avance', 'video', 'profil', 'ia'].includes(name)) {
+      setForm((prev) => ({
+        ...prev,
+        fonctions: { ...prev.fonctions, [name]: checked },
+      }));
+    } else if (['verresProgressifs', 'verresSpeciaux', 'traitements'].includes(name)) {
+      setForm((prev) => ({
+        ...prev,
+        [name]: checked,
+      }));
+    } else if (name === 'selectedApp') {
+      setSelectedApp(value);
+      setForm((prev) => ({
+        ...prev,
+        selectedApp: value,
+      }));
+    } else {
+      setForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
     }
   };
 
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Gère l'upload du logo si tu veux le stocker ou le copier
+    console.log("Logo uploaded", e.target.files?.[0]);
+  };
+
+  const handleDownload = () => {
+    handleSave(form);
+  };
+
+  const handleSave = (licence: Licence) => {
+    let updated = [...licences];
+    if (editing !== null) {
+      updated[editing] = licence;
+    } else {
+      updated.push(licence);
+    }
+    setLicences(updated);
+    setEditing(null);
+    resetForm();
+  };
+
+  const handleDelete = (index: number) => {
+    if (confirm('Supprimer cette licence ?')) {
+      const newLicences = licences.filter((_, i) => i !== index);
+      setLicences(newLicences);
+      setEditing(null);
+    }
+  };
+
+  const handleNew = () => {
+    setEditing(null);
+    resetForm();
+  };
+
+  const downloadJson = () => {
+    const json = JSON.stringify(licences, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'licences.json';
+    a.click();
+  };
+
   return (
-    <div style={{ maxWidth: 500, margin: '40px auto', fontFamily: 'sans-serif' }}>
-      <h1>OptiAdmin - Générateur de licence</h1>
-
-      <label>
-        Application :
-        <select value={selectedApp} onChange={handleInput} name="selectedApp">
-          <option value="OptiMesure">OptiMesure</option>
-          <option value="OptiDemo">OptiDemo</option>
-        </select>
-      </label>
-      <br />
-
-      <input name="licenceId" placeholder="Clé licence (ex: ABCD-1234)" value={form.licenceId} onChange={handleInput} /><br />
-      <input name="nom" placeholder="Nom opticien / société" value={form.nom} onChange={handleInput} /><br />
-      <input name="valideJusqu" type="date" value={form.valideJusqu} onChange={handleInput} /><br />
-      <textarea name="cachet" placeholder="Cachet ou mentions..." value={form.cachet} onChange={handleInput} /><br />
-
-      {selectedApp === "OptiMesure" && (
-        <>
-          <label><input type="checkbox" name="avance" checked={form.fonctions.avance} onChange={handleInput} /> Mode avancé</label><br />
-          <label><input type="checkbox" name="video" checked={form.fonctions.video} onChange={handleInput} /> Vidéo</label><br />
-          <label><input type="checkbox" name="profil" checked={form.fonctions.profil} onChange={handleInput} /> Profil</label><br />
-          <label><input type="checkbox" name="ia" checked={form.fonctions.ia} onChange={handleInput} /> IA</label><br /><br />
-        </>
-      )}
-
-      {selectedApp === "OptiDemo" && (
-        <>
-          <label><input type="checkbox" name="verresProgressifs" checked={form.verresProgressifs} onChange={handleInput} /> Verres progressifs</label><br />
-          <label><input type="checkbox" name="verresSpeciaux" checked={form.verresSpeciaux} onChange={handleInput} /> Verres spéciaux</label><br />
-          <label><input type="checkbox" name="traitements" checked={form.traitements} onChange={handleInput} /> Traitements</label><br /><br />
-        </>
-      )}
-
-      <input type="file" accept="image/*" onChange={handleLogoUpload} /><br /><br />
-
-      <button onClick={handleDownload}>
-        {editIndex === null ? '📦 Télécharger dossier .zip' : '💾 Enregistrer les modifications'}
-      </button>
-      <button onClick={handleSendToDrive}>📤 Envoyer sur Google Drive</button>
-
-
-      <hr style={{ margin: '40px 0' }} />
-      <h2>Licences existantes</h2>
+    <div style={{ maxWidth: 800, margin: '40px auto', fontFamily: 'sans-serif' }}>
+      <h1>OptiAdmin</h1>
+      <button onClick={handleNew}>➕ Nouvelle licence</button>{' '}
+      <button onClick={downloadJson}>📥 Exporter JSON</button>
+      <hr />
+      <LicenceEditor
+        form={form}
+        setForm={setForm}
+        selectedApp={selectedApp}
+        setSelectedApp={setSelectedApp}
+        handleInput={handleInput}
+        handleLogoUpload={handleLogoUpload}
+        handleDownload={handleDownload}
+        editIndex={editing}
+      />
+      <hr />
+      <h2>Licences enregistrées</h2>
       <ul>
-        {licences.map((licence, index) => (
-          <li key={index} style={{ marginBottom: '10px' }}>
-            <strong>{licence.nom}</strong> ({licence.licenceId}) – Valide jusqu’au {licence.valideJusqu}
+        {licences.map((lic, index) => (
+          <li key={index} style={{ marginBottom: 10 }}>
+            <strong>{lic.nom}</strong> – {lic.licenceId} ({lic.selectedApp}) – jusqu'au {lic.valideJusqu}
             <br />
-            <button onClick={() => handleEdit(index)}>✏️ Modifier</button>{' '}
+            <button onClick={() => setEditing(index)}>✏️ Modifier</button>{' '}
             <button onClick={() => handleDelete(index)}>🗑️ Supprimer</button>
           </li>
         ))}

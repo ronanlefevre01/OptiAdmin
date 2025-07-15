@@ -1,0 +1,8 @@
+[
+  {
+    "licenceId": "demo123",
+    "opticianName": "Optique Martin",
+    "validUntil": "2026-12-31",
+    "features": ["demo", "measure"]
+  }
+]
