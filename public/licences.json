@@ -30,5 +30,21 @@
     "verresSpeciaux": true,
     "traitements": true,
     "selectedApp": "OptiDemo"
+  },
+  {
+    "licenceId": "D34920JKV",
+    "nom": "Clem&Jo",
+    "valideJusqu": "2025-08-16",
+    "cachet": "",
+    "fonctions": {
+      "avance": false,
+      "video": false,
+      "profil": false,
+      "ia": false
+    },
+    "verresProgressifs": true,
+    "verresSpeciaux": true,
+    "traitements": true,
+    "selectedApp": "OptiDemo"
   }
 ]
