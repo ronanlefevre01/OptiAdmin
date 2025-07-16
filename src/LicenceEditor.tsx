@@ -1,45 +1,78 @@
-import React from 'react';
-
-interface Licence {
-  licenceId: string;
-  nom: string;
-  valideJusqu: string;
-  cachet: string;
-  fonctions: {
-    avance: boolean;
-    video: boolean;
-    profil: boolean;
-    ia: boolean;
-  };
-  verresProgressifs: boolean;
-  verresSpeciaux: boolean;
-  traitements: boolean;
-  selectedApp: string;
-}
+import React, { useEffect, useState } from 'react';
+import { Licence } from './App';
 
 interface Props {
-  form: Licence;
-  setForm: React.Dispatch<React.SetStateAction<Licence>>;
-  selectedApp: string;
-  setSelectedApp: (app: string) => void;
-  handleInput: (e: React.ChangeEvent<any>) => void;
-  handleLogoUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  handleDownload: () => void;
-  editIndex: number | null;
+  licence?: Licence;
+  onSave: (licence: Licence) => void;
+  onCancel?: () => void;
 }
 
-const LicenceEditor: React.FC<Props> = ({
-  form,
-  setForm,
-  selectedApp,
-  setSelectedApp,
-  handleInput,
-  handleLogoUpload,
-  handleDownload,
-  editIndex
-}) => {
+const defaultLicence: Licence = {
+  licenceId: '',
+  nom: '',
+  valideJusqu: '',
+  cachet: '',
+  fonctions: {
+    avance: false,
+    video: false,
+    profil: false,
+    ia: false,
+  },
+  verresProgressifs: false,
+  verresSpeciaux: false,
+  traitements: false,
+  selectedApp: 'OptiMesure',
+};
 
-  if (!form) return <div>Chargement...</div>;
+const LicenceEditor: React.FC<Props> = ({ licence, onSave, onCancel }) => {
+  const [form, setForm] = useState<Licence>(licence || defaultLicence);
+
+  useEffect(() => {
+    if (licence) {
+      setForm(licence);
+    }
+  }, [licence]);
+
+  const handleInput = (e: React.ChangeEvent<any>) => {
+    const { name, value, type, checked } = e.target;
+    if (['avance', 'video', 'profil', 'ia'].includes(name)) {
+      setForm(prev => ({
+        ...prev,
+        fonctions: {
+          ...prev.fonctions,
+          [name]: checked,
+        },
+      }));
+    } else if (['verresProgressifs', 'verresSpeciaux', 'traitements'].includes(name)) {
+      setForm(prev => ({
+        ...prev,
+        [name]: checked,
+      }));
+    } else {
+      setForm(prev => ({
+        ...prev,
+        [name]: type === 'checkbox' ? checked : value,
+      }));
+    }
+  };
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setForm(prev => ({
+          ...prev,
+          cachet: reader.result as string,
+        }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleDownload = () => {
+    onSave(form);
+  };
 
   return (
     <div style={{ maxWidth: 500, margin: '40px auto', fontFamily: 'sans-serif' }}>
@@ -47,7 +80,7 @@ const LicenceEditor: React.FC<Props> = ({
 
       <label>
         Application :
-        <select value={selectedApp} onChange={handleInput} name="selectedApp">
+        <select name="selectedApp" value={form.selectedApp} onChange={handleInput}>
           <option value="OptiMesure">OptiMesure</option>
           <option value="OptiDemo">OptiDemo</option>
         </select>
@@ -58,7 +91,7 @@ const LicenceEditor: React.FC<Props> = ({
       <input name="valideJusqu" type="date" value={form.valideJusqu} onChange={handleInput} /><br />
       <textarea name="cachet" placeholder="Cachet ou mentions..." value={form.cachet} onChange={handleInput} /><br />
 
-      {selectedApp === "OptiMesure" && (
+      {form.selectedApp === 'OptiMesure' && (
         <>
           <label><input type="checkbox" name="avance" checked={form.fonctions.avance} onChange={handleInput} /> Mode avancé</label><br />
           <label><input type="checkbox" name="video" checked={form.fonctions.video} onChange={handleInput} /> Vidéo</label><br />
@@ -67,7 +100,7 @@ const LicenceEditor: React.FC<Props> = ({
         </>
       )}
 
-      {selectedApp === "OptiDemo" && (
+      {form.selectedApp === 'OptiDemo' && (
         <>
           <label><input type="checkbox" name="verresProgressifs" checked={form.verresProgressifs} onChange={handleInput} /> Verres progressifs</label><br />
           <label><input type="checkbox" name="verresSpeciaux" checked={form.verresSpeciaux} onChange={handleInput} /> Verres spéciaux</label><br />
@@ -78,8 +111,13 @@ const LicenceEditor: React.FC<Props> = ({
       <input type="file" accept="image/*" onChange={handleLogoUpload} /><br /><br />
 
       <button onClick={handleDownload}>
-        {editIndex === null ? '📦 Télécharger dossier .zip' : '💾 Enregistrer les modifications'}
-      </button>
+        {licence ? '💾 Enregistrer les modifications' : '📦 Télécharger dossier .zip'}
+      </button>{' '}
+      {onCancel && (
+        <button onClick={onCancel} style={{ marginLeft: '10px' }}>
+          ❌ Annuler
+        </button>
+      )}
     </div>
   );
 };
