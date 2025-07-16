@@ -1,8 +1,34 @@
 [
   {
-    "licenceId": "demo123",
-    "opticianName": "Optique Martin",
-    "validUntil": "2027-12-31",
-    "features": ["demo", "measure"]
+    "licenceId": "ABCD-1234",
+    "nom": "OPTIQUE LEFEVRE",
+    "valideJusqu": "2025-07-17",
+    "cachet": "",
+    "fonctions": {
+      "avance": false,
+      "video": false,
+      "profil": false,
+      "ia": false
+    },
+    "verresProgressifs": true,
+    "verresSpeciaux": true,
+    "traitements": true,
+    "selectedApp": "OptiDemo"
+  },
+  {
+    "licenceId": "ABCD-13343",
+    "nom": "OPTIQUE LETEST",
+    "valideJusqu": "2025-07-17",
+    "cachet": "",
+    "fonctions": {
+      "avance": false,
+      "video": false,
+      "profil": false,
+      "ia": false
+    },
+    "verresProgressifs": true,
+    "verresSpeciaux": true,
+    "traitements": true,
+    "selectedApp": "OptiDemo"
   }
 ]
