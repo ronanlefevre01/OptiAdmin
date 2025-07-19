@@ -21,6 +21,7 @@ const defaultLicence: Licence = {
   verresProgressifs: false,
   verresSpeciaux: false,
   traitements: false,
+  libelleExpediteur: '',
   selectedApp: 'OptiMesure',
 };
 
@@ -83,6 +84,7 @@ const LicenceEditor: React.FC<Props> = ({ licence, onSave, onCancel }) => {
         <select name="selectedApp" value={form.selectedApp} onChange={handleInput}>
           <option value="OptiMesure">OptiMesure</option>
           <option value="OptiDemo">OptiDemo</option>
+          <option value="OptiCOM">OptiCOM</option>
         </select>
       </label><br />
 
@@ -105,6 +107,13 @@ const LicenceEditor: React.FC<Props> = ({ licence, onSave, onCancel }) => {
           <label><input type="checkbox" name="verresProgressifs" checked={form.verresProgressifs} onChange={handleInput} /> Verres progressifs</label><br />
           <label><input type="checkbox" name="verresSpeciaux" checked={form.verresSpeciaux} onChange={handleInput} /> Verres spéciaux</label><br />
           <label><input type="checkbox" name="traitements" checked={form.traitements} onChange={handleInput} /> Traitements</label><br /><br />
+        </>
+      )}
+
+      {form.selectedApp === 'OptiCOM' && (
+        <>
+          <label>Libellé expéditeur SMS</label><br />
+          <input name="libelleExpediteur" placeholder="Ex: Optique Martin" value={form.libelleExpediteur} onChange={handleInput} /><br /><br />
         </>
       )}
 
