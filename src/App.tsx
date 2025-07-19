@@ -16,6 +16,7 @@ export interface Licence {
   verresSpeciaux: boolean;
   traitements: boolean;
   selectedApp: string;
+  libelleExpediteur?: string; // ✅ Ajout ici
 }
 
 const App = () => {
@@ -108,58 +109,57 @@ const App = () => {
       </div>
 
       {/* Partie droite - aide */}
-<div style={{ flex: 1, background: '#f8f9fa', padding: '20px', border: '1px solid #ccc', borderRadius: '8px' }}>
-  <h3 style={{ marginTop: 0 }}>📋 Marche à suivre</h3>
-  <ol style={{ paddingLeft: '20px' }}>
-    <li>Remplir le formulaire de licence</li>
-    <li>Cliquer sur <strong>"Télécharger dossier .zip"</strong></li>
-    <li>Extraire le fichier <code>licences.json</code></li>
-    <li>Remplacer <code>public/licences.json</code> dans ton dossier local</li>
-    <li>Ouvrir <strong>Git Bash</strong> dans ce dossier</li>
-    <li>Exécuter les commandes suivantes :</li>
-  </ol>
+      <div style={{ flex: 1, background: '#f8f9fa', padding: '20px', border: '1px solid #ccc', borderRadius: '8px' }}>
+        <h3 style={{ marginTop: 0 }}>📋 Marche à suivre</h3>
+        <ol style={{ paddingLeft: '20px' }}>
+          <li>Remplir le formulaire de licence</li>
+          <li>Cliquer sur <strong>"Télécharger dossier .zip"</strong></li>
+          <li>Extraire le fichier <code>licences.json</code></li>
+          <li>Remplacer <code>public/licences.json</code> dans ton dossier local</li>
+          <li>Ouvrir <strong>Git Bash</strong> dans ce dossier</li>
+          <li>Exécuter les commandes suivantes :</li>
+        </ol>
 
-  <pre style={{ background: '#eee', padding: '10px', borderRadius: '4px', whiteSpace: 'pre-wrap' }}>
+        <pre style={{ background: '#eee', padding: '10px', borderRadius: '4px', whiteSpace: 'pre-wrap' }}>
 git add public/licences.json
 git commit -m "Mise à jour des licences"
 git push origin main
-  </pre>
+        </pre>
 
-  <button
-    onClick={() => {
-      const commands = `git add public/licences.json\n` +
-                       `git commit -m "Mise à jour des licences"\n` +
-                       `git push origin main`;
-      navigator.clipboard.writeText(commands)
-        .then(() => alert("✅ Commandes Git copiées dans le presse-papiers"))
-        .catch(() => alert("❌ Échec de la copie dans le presse-papiers"));
-    }}
-    style={{ marginBottom: '15px', marginTop: '5px', padding: '10px 15px' }}
-  >
-    📋 Copier la commande Git
-  </button>
+        <button
+          onClick={() => {
+            const commands = `git add public/licences.json\n` +
+              `git commit -m "Mise à jour des licences"\n` +
+              `git push origin main`;
+            navigator.clipboard.writeText(commands)
+              .then(() => alert("✅ Commandes Git copiées dans le presse-papiers"))
+              .catch(() => alert("❌ Échec de la copie dans le presse-papiers"));
+          }}
+          style={{ marginBottom: '15px', marginTop: '5px', padding: '10px 15px' }}
+        >
+          📋 Copier la commande Git
+        </button>
 
-  <div style={{ marginTop: '20px' }}>
-    <button
-      onClick={() =>
-        alert('📁 Ouvre manuellement ce dossier :\nC:\\Users\\TonNom\\Documents\\OptiAdmin\\public')
-      }
-      style={{ marginBottom: '10px', padding: '10px 15px' }}
-    >
-      📂 Ouvrir dossier licences.json
-    </button>
-    <br />
-    <button
-      onClick={() =>
-        alert('💻 Ouvre Git Bash et colle cette commande :\ncd "C:/Users/TonNom/Documents/OptiAdmin"')
-      }
-      style={{ padding: '10px 15px' }}
-    >
-      💻 Ouvrir Git Bash dans le bon dossier
-    </button>
-  </div>
-</div>
-
+        <div style={{ marginTop: '20px' }}>
+          <button
+            onClick={() =>
+              alert('📁 Ouvre manuellement ce dossier :\nC:\\Users\\TonNom\\Documents\\OptiAdmin\\public')
+            }
+            style={{ marginBottom: '10px', padding: '10px 15px' }}
+          >
+            📂 Ouvrir dossier licences.json
+          </button>
+          <br />
+          <button
+            onClick={() =>
+              alert('💻 Ouvre Git Bash et colle cette commande :\ncd "C:/Users/TonNom/Documents/OptiAdmin"')
+            }
+            style={{ padding: '10px 15px' }}
+          >
+            💻 Ouvrir Git Bash dans le bon dossier
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
