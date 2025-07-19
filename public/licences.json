@@ -46,5 +46,22 @@
     "verresSpeciaux": true,
     "traitements": true,
     "selectedApp": "OptiDemo"
+  },
+  {
+    "licenceId": "12345",
+    "nom": "Optique Lefevre",
+    "valideJusqu": "2025-08-19",
+    "cachet": "",
+    "fonctions": {
+      "avance": false,
+      "video": false,
+      "profil": false,
+      "ia": false
+    },
+    "verresProgressifs": false,
+    "verresSpeciaux": false,
+    "traitements": false,
+    "libelleExpediteur": "Optique Lefevre",
+    "selectedApp": "OptiCOM"
   }
 ]
