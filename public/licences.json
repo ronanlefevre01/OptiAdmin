@@ -16,22 +16,6 @@
     "selectedApp": "OptiDemo"
   },
   {
-    "licenceId": "ABCD-13343",
-    "nom": "OPTIQUE LETEST",
-    "valideJusqu": "2025-07-17",
-    "cachet": "",
-    "fonctions": {
-      "avance": false,
-      "video": false,
-      "profil": false,
-      "ia": false
-    },
-    "verresProgressifs": true,
-    "verresSpeciaux": true,
-    "traitements": true,
-    "selectedApp": "OptiDemo"
-  },
-  {
     "licenceId": "D34920JKV",
     "nom": "Clem&Jo",
     "valideJusqu": "2025-08-16",
@@ -62,6 +46,23 @@
     "verresSpeciaux": false,
     "traitements": false,
     "libelleExpediteur": "Optique Lefevre",
+    "selectedApp": "OptiCOM"
+  },
+  {
+    "licenceId": "ABCD-1234",
+    "nom": "OPTIQUE LEFEVRE",
+    "valideJusqu": "2025-08-19",
+    "cachet": "",
+    "fonctions": {
+      "avance": false,
+      "video": false,
+      "profil": false,
+      "ia": false
+    },
+    "verresProgressifs": false,
+    "verresSpeciaux": false,
+    "traitements": false,
+    "libelleExpediteur": "OptiqueLefevre",
     "selectedApp": "OptiCOM"
   }
 ]
