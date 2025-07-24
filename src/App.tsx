@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import HomePage from './HomePage';
-import OptiComAdmin from './OptiComAdmin';
-import OptiMesureAdmin from './OptiMesureAdmin';
+import OptiComAdmin from "./pages/OptiComAdmin"
+import OptiMesureAdmin from "./pages/OptiMesureAdmin"
+
 
 export default function App() {
   const [selectedApp, setSelectedApp] = useState<'OptiCOM' | 'OptiMesure' | null>(null);
