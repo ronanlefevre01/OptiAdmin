@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import LicenceEditor from './LicenceEditor';
+import LicenceEditor from '../LicenceEditor';
 
 export interface Licence {
   licenceId: string;
