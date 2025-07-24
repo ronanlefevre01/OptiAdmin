@@ -1,7 +1,7 @@
 import React from "react";
 import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
-
+import { Opticien } from '@/types/opticien'
 
 
 interface Facture {
@@ -24,7 +24,8 @@ const InvoicesTab: React.FC<Props> = ({ opticiens }) => {
         <Card key={opt.id}>
           <CardContent className="p-4">
             <h2 className="text-lg font-semibold mb-2">
-              👓 {opt.nom} — {opt.formule}
+              👓 {opt.nom} – {opt.abonnement?.formule}
+
             </h2>
 
             {Array.isArray(opt.factures) && opt.factures.length > 0 ? (
@@ -51,14 +52,8 @@ const InvoicesTab: React.FC<Props> = ({ opticiens }) => {
                       </td>
                       <td className="py-1">
                         {facture.fichierPdf ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              window.open(facture.fichierPdf, "_blank", "noopener,noreferrer")
-                            }
-                          >
-                            Voir
+                          <Button onClick={() => console.log("...")}>
+                           Télécharger
                           </Button>
                         ) : (
                           <span className="text-muted-foreground italic">N/A</span>

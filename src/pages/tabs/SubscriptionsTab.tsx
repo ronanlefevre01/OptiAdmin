@@ -36,7 +36,8 @@ const SubscriptionsTab: React.FC<SubscriptionsTabProps> = ({
     const updated = {
       ...opt.abonnement,
       dateFin: formData.dateFin,
-      statut: "Actif",
+      statut: "Actif" as "Actif" | "Suspendu" | "Annulé",
+
     }
     onUpdateAbonnement(opt.id, updated)
     setEditingId(null)

@@ -8,6 +8,8 @@ import CreditsTab from "./tabs/CreditsTab"
 import SubscriptionsTab from "./tabs/SubscriptionsTab"
 import SmsUsageTab from "./tabs/SmsUsageTab"
 import InvoicesTab from "./tabs/InvoicesTab"
+import { Opticien } from '../../types/opticien';
+
 
 // --- Interfaces ---
 
@@ -139,7 +141,8 @@ const OptiComAdmin = () => {
           }
         : opt
     )
-    saveToStorage(updated)
+    saveToStorage(updated as Opticien[]);
+
   }
 
   return (
