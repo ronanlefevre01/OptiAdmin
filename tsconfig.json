@@ -12,7 +12,11 @@
     "forceConsistentCasingInFileNames": true,
     "strict": false,
     "noEmit": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "baseUrl": ".",                              // ✅ Ajouté
+    "paths": {
+      "@/*": ["src/*"]                           // ✅ Ajouté
+    }
   },
   "include": ["src"],
   "exclude": ["node_modules"]
