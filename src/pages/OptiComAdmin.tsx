@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import { FileText, Package, Repeat, BarChart, FolderOpen } from "lucide-react"
 
 import OpticienDetailsPage from "./OpticienDetailsPage"
