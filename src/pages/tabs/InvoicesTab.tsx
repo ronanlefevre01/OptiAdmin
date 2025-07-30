@@ -1,15 +1,14 @@
 import React from "react";
 import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
-import { Opticien } from '@/types/opticien'
-
+import { Opticien } from "@/types/opticien";
 
 interface Facture {
   id: string;
   date: string;
   type: string;
   details: string;
-  montant: number;
+  montant: number; // Montant HT
   fichierPdf?: string;
 }
 
@@ -25,7 +24,6 @@ const InvoicesTab: React.FC<Props> = ({ opticiens }) => {
           <CardContent className="p-4">
             <h2 className="text-lg font-semibold mb-2">
               👓 {opt.nom} – {opt.abonnement?.formule}
-
             </h2>
 
             {Array.isArray(opt.factures) && opt.factures.length > 0 ? (
@@ -35,32 +33,42 @@ const InvoicesTab: React.FC<Props> = ({ opticiens }) => {
                     <th className="py-1">📅 Date</th>
                     <th className="py-1">Type</th>
                     <th className="py-1">Détail</th>
-                    <th className="py-1">💶 Montant</th>
+                    <th className="py-1">HT</th>
+                    <th className="py-1">TVA (20 %)</th>
+                    <th className="py-1">TTC</th>
                     <th className="py-1">📄 Facture</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {opt.factures.map((facture) => (
-                    <tr key={facture.id} className="border-b">
-                      <td className="py-1">{facture.date}</td>
-                      <td className="py-1">{facture.type}</td>
-                      <td className="py-1">{facture.details}</td>
-                      <td className="py-1">
-                        {Number.isFinite(facture.montant)
-                          ? facture.montant.toFixed(2) + " €"
-                          : "-"}
-                      </td>
-                      <td className="py-1">
-                        {facture.fichierPdf ? (
-                          <Button onClick={() => console.log("...")}>
-                           Télécharger
-                          </Button>
-                        ) : (
-                          <span className="text-muted-foreground italic">N/A</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {opt.factures.map((facture) => {
+                    const ht = facture.montant ?? 0;
+                    const tva = ht * 0.2;
+                    const ttc = ht + tva;
+
+                    return (
+                      <tr key={facture.id} className="border-b">
+                        <td className="py-1">{facture.date}</td>
+                        <td className="py-1">{facture.type}</td>
+                        <td className="py-1">{facture.details}</td>
+                        <td className="py-1">{ht.toFixed(2)} €</td>
+                        <td className="py-1">{tva.toFixed(2)} €</td>
+                        <td className="py-1">{ttc.toFixed(2)} €</td>
+                        <td className="py-1">
+                          {facture.fichierPdf ? (
+                            <a
+                              href={`https://opticom-sms-server.onrender.com/factures/${facture.fichierPdf}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <Button>Télécharger</Button>
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground italic">N/A</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             ) : (

@@ -64,11 +64,24 @@ const OptiComAdmin = () => {
   const [editing, setEditing] = useState<number | null>(null)
 
   useEffect(() => {
-    const stored = localStorage.getItem("opticom")
-    if (stored) {
-      setOpticiens(JSON.parse(stored))
-    }
-  }, [])
+  const stored = localStorage.getItem("opticom");
+  if (stored) {
+    setOpticiens(JSON.parse(stored));
+  } else {
+    // Chargement distant si pas dans le localStorage
+    fetch("https://opticom-sms-server.onrender.com/licences.json")
+      .then((res) => res.json())
+      .then((data) => {
+        setOpticiens(data);
+        localStorage.setItem("opticom", JSON.stringify(data));
+      })
+      .catch((err) => {
+        console.error("Erreur de chargement des licences :", err);
+      });
+  }
+}, []);
+
+
 
   const saveToStorage = (list: Opticien[]) => {
     setOpticiens(list)
