@@ -19,6 +19,11 @@ export default function MerciPage() {
         const data = await res.json();
         if (data.success) {
           setStatus('success');
+
+          // Redirection automatique après 3 secondes
+          setTimeout(() => {
+            window.location.href = 'opticom://merci';
+          }, 3000);
         } else {
           setStatus('error');
         }
@@ -34,20 +39,25 @@ export default function MerciPage() {
     <div style={styles.container}>
       <h1 style={styles.title}>🎉 Merci pour votre inscription</h1>
 
-      {status === 'loading' && <p style={styles.text}>Confirmation du mandat en cours...</p>}
+      {status === 'loading' && (
+        <p style={styles.text}>Confirmation du mandat en cours...</p>
+      )}
+
       {status === 'success' && (
         <>
-          <p style={styles.text}>✅ Votre mandat a bien été confirmé. Votre licence est maintenant active.</p>
-          <a
-            href="opticom://merci"
-            style={styles.button}
-          >
-            Ouvrir l'application
-          </a>
+          <p style={styles.text}>
+            ✅ Votre mandat a bien été confirmé. Redirection vers l’application en cours...
+          </p>
+          <p style={{ fontSize: 14, opacity: 0.6 }}>
+            Si rien ne se passe, <a href="opticom://merci" style={{ color: '#00BFFF' }}>cliquez ici</a>.
+          </p>
         </>
       )}
+
       {status === 'error' && (
-        <p style={{ ...styles.text, color: 'red' }}>❌ Une erreur est survenue lors de la confirmation du mandat.</p>
+        <p style={{ ...styles.text, color: 'red' }}>
+          ❌ Une erreur est survenue lors de la confirmation du mandat.
+        </p>
       )}
     </div>
   );
@@ -69,15 +79,5 @@ const styles = {
   text: {
     fontSize: '18px',
     marginBottom: '20px',
-  },
-  button: {
-    display: 'inline-block',
-    backgroundColor: '#00BFFF',
-    color: '#fff',
-    padding: '12px 24px',
-    borderRadius: '8px',
-    textDecoration: 'none',
-    fontWeight: 'bold',
-    fontSize: '16px',
   },
 };
