@@ -1,21 +1,21 @@
 import React, { useState } from "react";
 import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
-import { Opticien } from "@/types/opticien";
+import type { Opticien } from "../OptiComAdmin"; // ← import relatif (évite l'alias "@")
 
 // --- Types ---
 // Facture "UI" compatible avec:
 //  - ancien schéma: { fichierPdf }
 //  - nouveau schéma: { urlPdf, numero }
 type FactureUI = {
-  id: string;
-  date: string;          // YYYY-MM-DD
-  type: string;          // "Abonnement" | "Achat de crédits" | "Autre" | ...
+  id?: string;          // peut manquer si ancien schéma → on met une clé de secours
+  date: string;         // YYYY-MM-DD
+  type: string;         // "Abonnement" | "Achat de crédits" | "Autre" | ...
   details?: string;
-  montant?: number;      // HT (affichage)
-  fichierPdf?: string;   // (ancien) nom de fichier sur ton serveur
-  urlPdf?: string;       // (nouveau) URL complète
-  numero?: string;       // (nouveau) numéro de facture
+  montant?: number;     // HT (affichage)
+  fichierPdf?: string;  // (ancien) nom de fichier sur ton serveur
+  urlPdf?: string;      // (nouveau) URL complète
+  numero?: string;      // (nouveau) numéro de facture
 };
 
 interface Props {
@@ -52,6 +52,7 @@ const InvoicesTab: React.FC<Props> = ({ opticiens, onAttachInvoice }) => {
   const ensureForm = (id: string) => {
     if (!forms[id]) setForms((prev) => ({ ...prev, [id]: emptyForm() }));
   };
+
   const setField = (
     id: string,
     field: keyof ReturnType<typeof emptyForm>,
@@ -94,13 +95,13 @@ const InvoicesTab: React.FC<Props> = ({ opticiens, onAttachInvoice }) => {
     <div className="space-y-6">
       {opticiens.map((opt) => {
         const form = forms[opt.id] || emptyForm();
-        const factures = Array.isArray(opt.factures) ? opt.factures : [];
+        const factures: FactureUI[] = Array.isArray(opt.factures) ? opt.factures : [];
 
         return (
           <Card key={opt.id}>
             <CardContent className="p-4">
               <h2 className="text-lg font-semibold mb-3">
-                👓 {opt.nom} {opt?.abonnement && (opt as any).abonnement?.formule ? `– ${(opt as any).abonnement.formule}` : ""}
+                👓 {opt.nom} {opt.formule ? `– ${opt.formule}` : ""}
               </h2>
 
               {/* Tableau des factures existantes */}
@@ -119,7 +120,7 @@ const InvoicesTab: React.FC<Props> = ({ opticiens, onAttachInvoice }) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {factures.map((facture) => {
+                    {factures.map((facture, i) => {
                       const ht = typeof facture.montant === "number" ? facture.montant : 0;
                       const tva = ht * 0.2;
                       const ttc = ht + tva;
@@ -134,8 +135,11 @@ const InvoicesTab: React.FC<Props> = ({ opticiens, onAttachInvoice }) => {
                         ? `https://opticom-sms-server.onrender.com/factures/${facture.fichierPdf}`
                         : undefined;
 
+                      // clé stable même si id absent dans anciens enregistrements
+                      const rowKey = facture.id || facture.numero || `${facture.date}-${i}`;
+
                       return (
-                        <tr key={facture.id} className="border-b">
+                        <tr key={rowKey} className="border-b">
                           <td className="py-1">{facture.numero || "—"}</td>
                           <td className="py-1">{facture.date}</td>
                           <td className="py-1">{facture.type}</td>
@@ -242,7 +246,9 @@ const InvoicesTab: React.FC<Props> = ({ opticiens, onAttachInvoice }) => {
                 </div>
 
                 <div className="mt-3 text-right">
-                  <Button onClick={() => handleSubmit(opt.id)}>Attacher</Button>
+                  <Button onClick={() => handleSubmit(opt.id)} disabled={!onAttachInvoice}>
+                    Attacher
+                  </Button>
                 </div>
               </div>
             </CardContent>

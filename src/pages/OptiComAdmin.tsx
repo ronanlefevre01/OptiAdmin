@@ -8,7 +8,6 @@ import CreditsTab from "./tabs/CreditsTab"
 import SubscriptionsTab from "./tabs/SubscriptionsTab"
 import SmsUsageTab from "./tabs/SmsUsageTab"
 import InvoicesTab from "./tabs/InvoicesTab"
-// import { Opticien as OpticienModel } from '../../types/opticien' // si besoin
 
 // =============================
 // Interfaces
@@ -65,42 +64,65 @@ export interface Opticien {
 // =============================
 // JSONBin client (UNE SEULE BIN)
 // =============================
-const JSONBIN_BASE = (import.meta as any).env?.VITE_JSONBIN_BASE || "https://api.jsonbin.io/v3"
-const JSONBIN_MASTER_KEY = (import.meta as any).env?.VITE_JSONBIN_MASTER_KEY
-const JSONBIN_OPTICOM_BIN_ID = (import.meta as any).env?.VITE_JSONBIN_OPTICOM_BIN_ID // ⬅️ ton bin existant
 
+// Supporte Vite (import.meta.env) et fallback process.env (utile en preview/outillage)
+const viteEnv = (typeof import.meta !== "undefined" && (import.meta as any).env) || {};
+const procEnv = (typeof process !== "undefined" && (process as any).env) || {};
+
+const JSONBIN_BASE: string =
+  viteEnv.VITE_JSONBIN_BASE || procEnv.VITE_JSONBIN_BASE || "https://api.jsonbin.io/v3";
+
+const JSONBIN_MASTER_KEY: string | undefined =
+  viteEnv.VITE_JSONBIN_MASTER_KEY || procEnv.VITE_JSONBIN_MASTER_KEY;
+
+const JSONBIN_OPTICOM_BIN_ID: string =
+  viteEnv.VITE_JSONBIN_OPTICOM_BIN_ID || procEnv.VITE_JSONBIN_OPTICOM_BIN_ID || "";
+
+// Helpers fetch (n’ajoute la clé que si elle existe)
 async function jsonbinGet<T>(binId: string): Promise<T> {
+  const headers: Record<string, string> = { "X-Bin-Meta": "false" };
+  if (JSONBIN_MASTER_KEY) headers["X-Master-Key"] = JSONBIN_MASTER_KEY;
+
   const r = await fetch(`${JSONBIN_BASE}/b/${binId}/latest`, {
-    headers: { "X-Master-Key": JSONBIN_MASTER_KEY, "X-Bin-Meta": "false" },
+    headers,
     cache: "no-store",
-  })
-  if (!r.ok) throw new Error(`JSONBin GET ${r.status}`)
-  const j = await r.json()
-  return j.record as T
+  });
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    throw new Error(`JSONBin GET ${r.status} ${txt}`);
+  }
+  const j = await r.json();
+  return j.record as T;
 }
 
 async function jsonbinPut<T>(binId: string, record: T): Promise<T> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (JSONBIN_MASTER_KEY) headers["X-Master-Key"] = JSONBIN_MASTER_KEY;
+
   const r = await fetch(`${JSONBIN_BASE}/b/${binId}`, {
     method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Master-Key": JSONBIN_MASTER_KEY,
-    },
+    headers,
     body: JSON.stringify(record),
-  })
-  if (!r.ok) throw new Error(`JSONBin PUT ${r.status}`)
-  const j = await r.json()
-  return j.record as T
+  });
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    throw new Error(`JSONBin PUT ${r.status} ${txt}`);
+  }
+  const j = await r.json();
+  return j.record as T;
 }
 
 async function loadOpticiens(): Promise<Opticien[]> {
-  if (!JSONBIN_OPTICOM_BIN_ID) throw new Error("VITE_JSONBIN_OPTICOM_BIN_ID manquant")
-  return jsonbinGet<Opticien[]>(JSONBIN_OPTICOM_BIN_ID)
+  if (!JSONBIN_OPTICOM_BIN_ID) throw new Error("VITE_JSONBIN_OPTICOM_BIN_ID manquant");
+  const record = await jsonbinGet<any>(JSONBIN_OPTICOM_BIN_ID);
+  // ⚠️ Le bin peut renvoyer un objet unique → on force un tableau
+  const list = Array.isArray(record) ? record : (record ? [record] : []);
+  return list as Opticien[];
 }
 
 async function saveOpticiens(list: Opticien[]): Promise<Opticien[]> {
-  if (!JSONBIN_OPTICOM_BIN_ID) throw new Error("VITE_JSONBIN_OPTICOM_BIN_ID manquant")
-  return jsonbinPut<Opticien[]>(JSONBIN_OPTICOM_BIN_ID, list)
+  if (!JSONBIN_OPTICOM_BIN_ID) throw new Error("VITE_JSONBIN_OPTICOM_BIN_ID manquant");
+  return jsonbinPut<Opticien[]>(JSONBIN_OPTICOM_BIN_ID, list);
 }
 
 // =============================
@@ -111,6 +133,8 @@ const OptiComAdmin = () => {
   const [editing, setEditing] = useState<number | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
+  // Onglets contrôlés (évite des états internes capricieux en prod)
+  const [tab, setTab] = useState<"licences"|"credits"|"subscriptions"|"sms"|"invoices">("licences")
 
   // Chargement initial : JSONBin puis fallback localStorage
   useEffect(() => {
@@ -125,9 +149,16 @@ const OptiComAdmin = () => {
         console.warn("JSONBin indisponible, fallback localStorage", e)
         const stored = localStorage.getItem("opticom")
         if (stored) {
-          setOpticiens(JSON.parse(stored))
-          setError(null)
+          try {
+            const parsed = JSON.parse(stored)
+            setOpticiens(Array.isArray(parsed) ? parsed : [])
+            setError(null)
+          } catch {
+            setOpticiens([])
+            setError("Impossible de charger les données (JSONBin et localStorage vides)")
+          }
         } else {
+          setOpticiens([])
           setError("Impossible de charger les données (JSONBin et localStorage vides)")
         }
       } finally {
@@ -213,7 +244,6 @@ const OptiComAdmin = () => {
   // =============================
   // ⭐️ Nouveaux helpers
   // =============================
-  // ± Crédits (ex: –100 / +100)
   const handleChangeCredits = (opticienId: string, delta: number) => {
     const updated = opticiens.map((opt) =>
       opt.id === opticienId ? { ...opt, credits: Math.max(0, (opt.credits || 0) + delta) } : opt
@@ -221,13 +251,12 @@ const OptiComAdmin = () => {
     saveToStorage(updated)
   }
 
-  // Changer la formule
   const handleChangeFormule = (opticienId: string, formule: Opticien["formule"]) => {
     const updated = opticiens.map((opt) => (opt.id === opticienId ? { ...opt, formule } : opt))
     saveToStorage(updated)
   }
 
-  // Attacher une facture DÉJÀ GÉNÉRÉE (URL complète) — id auto
+  // Attacher une facture DÉJÀ GÉNÉRÉE (URL complète) — id auto sécurisé
   const handleAttachInvoice = (
     opticienId: string,
     facture: {
@@ -241,8 +270,12 @@ const OptiComAdmin = () => {
   ) => {
     const updated = opticiens.map((opt) => {
       if (opt.id !== opticienId) return opt
-      const factures = opt.factures || []
-      const rec: Facture = { id: crypto.randomUUID(), ...facture } // stocke urlPdf/numero (et garde compat fichierPdf si ancien)
+      const factures = Array.isArray(opt.factures) ? opt.factures : []
+      const safeId =
+        (typeof crypto !== "undefined" && (crypto as any).randomUUID)
+          ? (crypto as any).randomUUID()
+          : Math.random().toString(36).slice(2) + Date.now().toString(36)
+      const rec: Facture = { id: safeId, ...facture }
       return { ...opt, factures: [rec, ...factures] }
     })
     saveToStorage(updated)
@@ -255,7 +288,7 @@ const OptiComAdmin = () => {
       {loading && <div className="mb-4">Chargement des données…</div>}
       {error && <div className="mb-4 text-red-600">{error}</div>}
 
-      <Tabs defaultValue="licences" className="w-full">
+      <Tabs value={tab} onValueChange={(v)=>setTab(v as any)} className="w-full">
         <TabsList className="grid w-full grid-cols-5 mb-4">
           <TabsTrigger value="licences"><FileText className="mr-2 h-4 w-4" /> Licences</TabsTrigger>
           <TabsTrigger value="credits"><Package className="mr-2 h-4 w-4" /> Crédits</TabsTrigger>
@@ -276,8 +309,8 @@ const OptiComAdmin = () => {
               opticiens={opticiens}
               onEdit={handleEdit}
               onDelete={handleDelete}
-              onChangeFormule={handleChangeFormule}  // ← ajout
-              onChangeCredits={handleChangeCredits}  // ← ajout
+              onChangeFormule={handleChangeFormule}
+              onChangeCredits={handleChangeCredits}
             />
           )}
         </TabsContent>
@@ -300,8 +333,8 @@ const OptiComAdmin = () => {
 
         <TabsContent value="invoices">
           <InvoicesTab
-            opticiens={opticiens as any}           // TS structurally compatible
-            onAttachInvoice={handleAttachInvoice}  // ← pousse l’URL du PDF
+            opticiens={opticiens as any}
+            onAttachInvoice={handleAttachInvoice}
           />
         </TabsContent>
       </Tabs>
