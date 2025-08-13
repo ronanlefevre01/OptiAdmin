@@ -39,11 +39,9 @@ export interface Facture {
   date: string
   type: "Abonnement" | "Achat de crédits" | "Autre"
   details?: string
-  montant?: number      // HT (affichage)
-  // nouveau schéma recommandé :
+  montant?: number
   urlPdf?: string
   numero?: string
-  // ancien schéma (pour compat) :
   fichierPdf?: string
 }
 
@@ -62,31 +60,35 @@ export interface Opticien {
 }
 
 // =============================
-// JSONBin client (UNE SEULE BIN)
+// ENV + clients API
 // =============================
-
-// Supporte Vite (import.meta.env) et fallback process.env (utile en preview/outillage)
 const viteEnv = (typeof import.meta !== "undefined" && (import.meta as any).env) || {};
 const procEnv = (typeof process !== "undefined" && (process as any).env) || {};
 
+const API_BASE: string =
+  viteEnv.VITE_SERVER_BASE || procEnv.VITE_SERVER_BASE || "https://opticom-sms-server.onrender.com";
+
 const JSONBIN_BASE: string =
   viteEnv.VITE_JSONBIN_BASE || procEnv.VITE_JSONBIN_BASE || "https://api.jsonbin.io/v3";
-
 const JSONBIN_MASTER_KEY: string | undefined =
   viteEnv.VITE_JSONBIN_MASTER_KEY || procEnv.VITE_JSONBIN_MASTER_KEY;
-
 const JSONBIN_OPTICOM_BIN_ID: string =
   viteEnv.VITE_JSONBIN_OPTICOM_BIN_ID || procEnv.VITE_JSONBIN_OPTICOM_BIN_ID || "";
 
-// Helpers fetch (n’ajoute la clé que si elle existe)
+// --- API serveur : /api/licences ---
+async function fetchServerLicences(): Promise<Opticien[]> {
+  const r = await fetch(`${API_BASE}/api/licences`, { cache: "no-store" });
+  if (!r.ok) throw new Error(`API /api/licences ${r.status}`);
+  const data = await r.json();
+  return Array.isArray(data) ? data : (data ? [data] : []);
+}
+
+// --- JSONBin helpers ---
 async function jsonbinGet<T>(binId: string): Promise<T> {
   const headers: Record<string, string> = { "X-Bin-Meta": "false" };
   if (JSONBIN_MASTER_KEY) headers["X-Master-Key"] = JSONBIN_MASTER_KEY;
 
-  const r = await fetch(`${JSONBIN_BASE}/b/${binId}/latest`, {
-    headers,
-    cache: "no-store",
-  });
+  const r = await fetch(`${JSONBIN_BASE}/b/${binId}/latest`, { headers, cache: "no-store" });
   if (!r.ok) {
     const txt = await r.text().catch(() => "");
     throw new Error(`JSONBin GET ${r.status} ${txt}`);
@@ -115,7 +117,6 @@ async function jsonbinPut<T>(binId: string, record: T): Promise<T> {
 async function loadOpticiens(): Promise<Opticien[]> {
   if (!JSONBIN_OPTICOM_BIN_ID) throw new Error("VITE_JSONBIN_OPTICOM_BIN_ID manquant");
   const record = await jsonbinGet<any>(JSONBIN_OPTICOM_BIN_ID);
-  // ⚠️ Le bin peut renvoyer un objet unique → on force un tableau
   const list = Array.isArray(record) ? record : (record ? [record] : []);
   return list as Opticien[];
 }
@@ -133,20 +134,34 @@ const OptiComAdmin = () => {
   const [editing, setEditing] = useState<number | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
-  // Onglets contrôlés (évite des états internes capricieux en prod)
   const [tab, setTab] = useState<"licences"|"credits"|"subscriptions"|"sms"|"invoices">("licences")
 
-  // Chargement initial : JSONBin puis fallback localStorage
+  // Chargement initial : API serveur → JSONBin → localStorage
   useEffect(() => {
     (async () => {
       try {
         setLoading(true)
+
+        // 1) serveur (même source de vérité que l’app)
+        try {
+          const fromApi = await fetchServerLicences()
+          if (fromApi && fromApi.length >= 0) {
+            setOpticiens(fromApi)
+            localStorage.setItem("opticom", JSON.stringify(fromApi))
+            setError(null)
+            return
+          }
+        } catch (_e) {
+          // on tente JSONBin après
+        }
+
+        // 2) JSONBin direct
         const remote = await loadOpticiens()
         setOpticiens(remote)
         localStorage.setItem("opticom", JSON.stringify(remote))
         setError(null)
       } catch (e: any) {
-        console.warn("JSONBin indisponible, fallback localStorage", e)
+        console.warn("Distant KO, fallback localStorage", e)
         const stored = localStorage.getItem("opticom")
         if (stored) {
           try {
@@ -155,11 +170,11 @@ const OptiComAdmin = () => {
             setError(null)
           } catch {
             setOpticiens([])
-            setError("Impossible de charger les données (JSONBin et localStorage vides)")
+            setError("Impossible de charger les données (distants & localStorage vides)")
           }
         } else {
           setOpticiens([])
-          setError("Impossible de charger les données (JSONBin et localStorage vides)")
+          setError("Impossible de charger les données (distants & localStorage vides)")
         }
       } finally {
         setLoading(false)
@@ -216,7 +231,7 @@ const OptiComAdmin = () => {
   const handleCancelAbonnement = async (opticienId: string, mandateId?: string) => {
     if (mandateId) {
       try {
-        await fetch("https://opticom-sms-server.onrender.com/api/cancel-gocardless", {
+        await fetch(`${API_BASE}/api/cancel-gocardless`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ mandateId }),
