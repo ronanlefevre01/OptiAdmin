@@ -1,67 +1,56 @@
-import React from "react"
-import { Opticien } from "../OptiComAdmin"
+import React from "react";
+import { normalize } from "./utils";
 
-interface SmsUsageTabProps {
-  opticiens: Opticien[]
-}
+type Props = { opticiens: any[] };
 
-const SmsUsageTab: React.FC<SmsUsageTabProps> = ({ opticiens }) => {
-  // Créer un objet de statistiques par opticien et par mois
-  const stats: Record<string, Record<string, { totalSms: number; totalCredits: number }>> = {}
-
-  opticiens.forEach((opt) => {
-    opt.historiqueSms?.forEach((sms) => {
-      const mois = new Date(sms.date).toLocaleString("fr-FR", {
-        month: "long",
-        year: "numeric",
-      })
-
-      if (!stats[opt.nom]) stats[opt.nom] = {}
-      if (!stats[opt.nom][mois]) stats[opt.nom][mois] = { totalSms: 0, totalCredits: 0 }
-
-      stats[opt.nom][mois].totalSms += 1
-      stats[opt.nom][mois].totalCredits += sms.credits
-    })
-  })
-
-  const lignes = Object.entries(stats).flatMap(([opticien, moisStats]) =>
-    Object.entries(moisStats).map(([mois, values]) => ({
-      opticien,
-      mois,
-      ...values,
-    }))
-  )
-
-  if (lignes.length === 0) {
-    return <p className="italic text-gray-500">Aucun SMS envoyé pour l’instant.</p>
+const SmsUsageTab: React.FC<Props> = ({ opticiens }) => {
+  if (!Array.isArray(opticiens) || opticiens.length === 0) {
+    return <p>Aucune consommation.</p>;
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full text-sm border">
-        <thead className="bg-gray-100 text-left">
-          <tr>
-            <th className="px-3 py-2 border-r">📅 Mois</th>
-            <th className="px-3 py-2 border-r">👓 Opticien</th>
-            <th className="px-3 py-2 border-r">✉️ SMS envoyés</th>
-            <th className="px-3 py-2">🔢 Crédits utilisés</th>
-          </tr>
-        </thead>
-        <tbody>
-          {lignes.map((line, i) => (
-            <tr key={i} className="border-t">
-              <td className="px-3 py-2">{line.mois}</td>
-              <td className="px-3 py-2">{line.opticien}</td>
-              <td className="px-3 py-2">{line.totalSms}</td>
-              <td className="px-3 py-2">{line.totalCredits}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="space-y-6">
+      {opticiens.map((raw, i) => {
+        const n = normalize(raw);
+        const logs = n.sms || [];
+        const total = logs.length;
+
+        return (
+          <div key={n.id || i} className="border rounded-md p-4 shadow-sm">
+            <div className="flex items-baseline justify-between">
+              <div className="text-lg font-semibold">{n.enseigne}</div>
+              <div className="text-sm text-gray-600">{total} SMS envoyés</div>
+            </div>
+
+            {total === 0 ? (
+              <p className="text-sm text-gray-500 mt-2">Aucun historique disponible.</p>
+            ) : (
+              <table className="w-full text-sm mt-3">
+                <thead className="text-left border-b">
+                  <tr>
+                    <th className="py-1">Date</th>
+                    <th className="py-1">Type</th>
+                    <th className="py-1">Crédits</th>
+                    <th className="py-1">Message</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {logs.slice(0, 10).map((m, idx) => (
+                    <tr key={idx} className="border-b">
+                      <td className="py-1">{m.date ? new Date(m.date).toLocaleString("fr-FR") : "—"}</td>
+                      <td className="py-1">{m.type || "—"}</td>
+                      <td className="py-1">{typeof m.credits === "number" ? m.credits : 1}</td>
+                      <td className="py-1">{(m.message || "").slice(0, 80)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        );
+      })}
     </div>
-  )
-}
+  );
+};
 
-// À ajouter à la fin du fichier
 export default SmsUsageTab;
-
