@@ -78,9 +78,9 @@ async function fetchServerLicences(): Promise<any[]> {
       const r = await fetch(url, { cache: "no-store" });
       if (r.ok) {
         const data = await r.json();
-        return Array.isArray(data) ? data : (data ? [data] : []);
+        return Array.isArray(data) ? data : data ? [data] : [];
       }
-    } catch (_) {
+    } catch {
       /* try next */
     }
   }
@@ -119,11 +119,52 @@ async function jsonbinPut<T>(binId: string, record: T): Promise<T> {
 async function loadOpticiens(): Promise<any[]> {
   if (!JSONBIN_OPTICOM_BIN_ID) throw new Error("VITE_JSONBIN_OPTICOM_BIN_ID manquant");
   const record = await jsonbinGet<any>(JSONBIN_OPTICOM_BIN_ID);
-  return Array.isArray(record) ? record : (record ? [record] : []);
+  return Array.isArray(record) ? record : record ? [record] : [];
 }
 async function saveOpticiens(list: any[]): Promise<any[]> {
   if (!JSONBIN_OPTICOM_BIN_ID) throw new Error("VITE_JSONBIN_OPTICOM_BIN_ID manquant");
   return jsonbinPut<any[]>(JSONBIN_OPTICOM_BIN_ID, list);
+}
+
+// =============================
+// Helpers CGV
+// =============================
+
+// Tente de récupérer l'identifiant de licence attendu par /licence/cgv-status
+function getLicenceId(o: any) {
+  return String(
+    o?.id ||            // schéma courant côté serveur
+    o?.licence ||       // anciens schémas
+    o?.opticien?.id ||  // éventuels schémas imbriqués
+    ""
+  );
+}
+
+// Décore chaque entrée avec cgvAccepted / versions
+async function decorateWithCgvStatus(list: any[]) {
+  const rows = await Promise.all(
+    list.map(async (o) => {
+      const id = getLicenceId(o);
+      if (!id) return o;
+      try {
+        const r = await fetch(
+          `${API_BASE}/licence/cgv-status?licenceId=${encodeURIComponent(id)}`,
+          { cache: "no-store" }
+        );
+        if (!r.ok) return o;
+        const s = await r.json();
+        return {
+          ...o,
+          cgvAccepted: !!s.accepted,
+          cgvAcceptedVersion: s.acceptedVersion,
+          cgvCurrentVersion: s.currentVersion,
+        };
+      } catch {
+        return o;
+      }
+    })
+  );
+  return rows;
 }
 
 // =============================
@@ -137,10 +178,9 @@ const OptiComAdmin = () => {
   const [reloading, setReloading] = useState(false);
   const [tab, setTab] = useState<"licences" | "credits" | "subscriptions" | "sms" | "invoices">("licences");
 
-  // Charge d'abord le serveur (même source que l'app), sinon JSONBin, sinon localStorage
   useEffect(() => {
     (async () => {
-      await reloadFromRemote(); // centralise la logique
+      await reloadFromRemote();
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -153,17 +193,19 @@ const OptiComAdmin = () => {
       // 1) Serveur
       try {
         const fromApi = await fetchServerLicences();
-        setOpticiens(fromApi);
-        localStorage.setItem("opticom", JSON.stringify(fromApi));
-        return; // on s'arrête ici si ok
+        const withCgv = await decorateWithCgvStatus(fromApi);
+        setOpticiens(withCgv);
+        localStorage.setItem("opticom", JSON.stringify(withCgv));
+        return;
       } catch {
         /* fallback */
       }
 
       // 2) JSONBin
       const remote = await loadOpticiens();
-      setOpticiens(remote);
-      localStorage.setItem("opticom", JSON.stringify(remote));
+      const withCgv = await decorateWithCgvStatus(remote);
+      setOpticiens(withCgv);
+      localStorage.setItem("opticom", JSON.stringify(withCgv));
     } catch (e: any) {
       console.warn("Distants KO, fallback localStorage", e);
       const stored = localStorage.getItem("opticom");
@@ -185,25 +227,25 @@ const OptiComAdmin = () => {
     }
   }
 
-  // Bouton "Recharger"
+  // Boutons Reload
   const handleReloadClick = async () => {
     setReloading(true);
     await reloadFromRemote();
     setReloading(false);
   };
-
-  // Bouton "Vider cache + Recharger"
   const handleClearCacheAndReload = async () => {
     localStorage.removeItem("opticom");
     await handleReloadClick();
   };
 
-  // Sauvegarde centralisée (JSONBin + cache local)
+  // Sauvegarde centralisée
   const saveToStorage = async (list: any[]) => {
-    setOpticiens(list);
-    localStorage.setItem("opticom", JSON.stringify(list));
+    // on garde la liste enrichie CGV pour l’UI + cache
+    const withCgv = await decorateWithCgvStatus(list);
+    setOpticiens(withCgv);
+    localStorage.setItem("opticom", JSON.stringify(withCgv));
     try {
-      await saveOpticiens(list);
+      await saveOpticiens(withCgv);
     } catch (e) {
       console.error("Sauvegarde JSONBin échouée (modifs gardées en localStorage)", e);
     }

@@ -2,7 +2,6 @@ import React from "react";
 import type { Opticien } from "../OptiComAdmin";
 
 interface LicencesTabProps {
-  // on garde large car tes données viennent de sources mixtes
   opticiens: any[];
   onEdit: (index: number) => void;
   onDelete: (index: number) => void;
@@ -33,22 +32,35 @@ function normalizeRow(raw: any) {
     raw?.abonnement ||
     "—";
 
-  const credits =
-    typeof raw?.credits === "number" ? raw.credits : 0;
+  const credits = typeof raw?.credits === "number" ? raw.credits : 0;
 
   const licenceKey = raw?.licence || "—";
   const sender = raw?.libelleExpediteur || "—";
 
-  const created =
-    raw?.dateCreation
-      ? new Date(raw.dateCreation).toLocaleDateString("fr-FR")
-      : undefined;
+  const created = raw?.dateCreation
+    ? new Date(raw.dateCreation).toLocaleDateString("fr-FR")
+    : undefined;
 
-  // CGV (schéma côté serveur: licence.cgv)
-  const cgvVersion = raw?.cgv?.acceptedVersion || null;
-  const cgvAt = raw?.cgv?.acceptedAt
-    ? new Date(raw.cgv.acceptedAt).toLocaleString("fr-FR")
-    : null;
+  // ✅ CGV — prend en compte les champs décorés (plats) OU l'ancien schéma raw.cgv
+  const cgvAccepted =
+    typeof raw?.cgvAccepted === "boolean"
+      ? raw.cgvAccepted
+      : !!raw?.cgv?.accepted;
+
+  const cgvVersion =
+    raw?.cgvAcceptedVersion ??
+    raw?.cgv?.acceptedVersion ??
+    null;
+
+  const cgvCurrentVersion =
+    raw?.cgvCurrentVersion ??
+    raw?.cgv?.currentVersion ??
+    null;
+
+  const cgvAt =
+    raw?.cgv?.acceptedAt
+      ? new Date(raw.cgv.acceptedAt).toLocaleString("fr-FR")
+      : null;
 
   return {
     id,
@@ -61,17 +73,15 @@ function normalizeRow(raw: any) {
     licenceKey,
     sender,
     created,
+    // CGV normalisées
+    cgvAccepted,
     cgvVersion,
+    cgvCurrentVersion,
     cgvAt,
   };
 }
 
-const FORMULES: Opticien["formule"][] = [
-  "Starter",
-  "Pro",
-  "Premium",
-  "À la carte",
-];
+const FORMULES: Opticien["formule"][] = ["Starter", "Pro", "Premium", "À la carte"];
 
 const LicencesTab: React.FC<LicencesTabProps> = ({
   opticiens,
@@ -118,9 +128,12 @@ const LicencesTab: React.FC<LicencesTabProps> = ({
 
               <div className="text-sm">
                 CGV&nbsp;:&nbsp;
-                {row.cgvVersion ? (
+                {row.cgvAccepted ? (
                   <>
-                    ✅ {row.cgvVersion}
+                    ✅ {row.cgvVersion || "acceptées"}
+                    {row.cgvCurrentVersion && row.cgvVersion && row.cgvCurrentVersion !== row.cgvVersion ? (
+                      <span className="text-amber-600"> — à mettre à jour vers {row.cgvCurrentVersion}</span>
+                    ) : null}
                     {row.cgvAt ? <span className="text-gray-600"> — {row.cgvAt}</span> : null}
                   </>
                 ) : (
@@ -160,16 +173,13 @@ const LicencesTab: React.FC<LicencesTabProps> = ({
                       : "Starter"
                   }
                   onChange={(e) =>
-                    hasId &&
-                    onChangeFormule?.(row.id, e.target.value as Opticien["formule"])
+                    hasId && onChangeFormule?.(row.id, e.target.value as Opticien["formule"])
                   }
                   disabled={!hasId}
                   title={!hasId ? "Identifiant manquant" : ""}
                 >
                   {FORMULES.map((f) => (
-                    <option key={f} value={f}>
-                      {f}
-                    </option>
+                    <option key={f} value={f}>{f}</option>
                   ))}
                 </select>
               </div>
