@@ -1,16 +1,27 @@
 // src/types.ts
-export type LicencePlan = 'basic' | 'pro' | 'unlimited';
+export type SelectedApp = 'OptiMesure' | 'OptiDemo' | 'OptiCOM';
 
-export type Licence = {
-  id?: string;
-  name: string;
-  siret?: string;
-  sender: string;                 // 3–11 A-Z/0-9
-  plan: LicencePlan;
-  credits: number;
-  contact?: {
-    name?: string;
-    email?: string;
-    phone?: string;
+export interface Licence {
+  licenceId: string;
+  nom: string;
+  valideJusqu: string; // YYYY-MM-DD
+  cachet: string;
+
+  // OptiMesure – fonctions
+  fonctions: {
+    avance: boolean;
+    video: boolean;
+    profil: boolean;
+    ia: boolean;
   };
-};
+
+  // OptiDemo – flags
+  verresProgressifs: boolean;
+  verresSpeciaux: boolean;
+  traitements: boolean;
+
+  // OptiCOM – peut ne pas être défini sur les autres apps
+  libelleExpediteur?: string;  // <- OPTIONNEL
+
+  selectedApp: SelectedApp;
+}
