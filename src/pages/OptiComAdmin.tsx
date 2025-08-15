@@ -9,7 +9,7 @@ import CreditsTab from "./tabs/CreditsTab";
 import SubscriptionsTab from "./tabs/SubscriptionsTab";
 import SmsUsageTab from "./tabs/SmsUsageTab";
 import InvoicesTab from "./tabs/InvoicesTab";
-// import LicenceCreateForm from "../components/LicenceCreateForm";
+import LicenceCreateForm from "../components/LicenceCreateForm";
 
 export interface AchatCredit {
   date: string;
@@ -74,7 +74,9 @@ async function fetchServerLicences(): Promise<any[]> {
         const data = await r.json();
         return Array.isArray(data) ? data : data ? [data] : [];
       }
-    } catch {}
+    } catch {
+      /* try next */
+    }
   }
   throw new Error("Aucun endpoint de licences côté serveur");
 }
@@ -155,6 +157,7 @@ const OptiComAdmin = () => {
   const [error, setError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
   const [tab, setTab] = useState<TabKey>("licences");
+  const [showCreate, setShowCreate] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -167,14 +170,18 @@ const OptiComAdmin = () => {
       setLoading(true);
       setError(null);
 
+      // 1) Serveur
       try {
         const fromApi = await fetchServerLicences();
         const withCgv = await decorateWithCgvStatus(fromApi);
         setOpticiens(withCgv);
         localStorage.setItem("opticom", JSON.stringify(withCgv));
         return;
-      } catch {}
+      } catch {
+        /* fallback */
+      }
 
+      // 2) JSONBin
       const remote = await loadOpticiens();
       const withCgv = await decorateWithCgvStatus(remote);
       setOpticiens(withCgv);
@@ -330,6 +337,13 @@ const OptiComAdmin = () => {
         >
           🧹 Vider le cache + recharger
         </button>
+        <button
+          onClick={() => setShowCreate((v) => !v)}
+          className="text-sm border rounded px-3 py-1"
+          title="Créer une nouvelle licence"
+        >
+          {showCreate ? "Fermer" : "➕ Nouvelle licence"}
+        </button>
       </div>
 
       {loading && <div className="mb-4">Chargement des données…</div>}
@@ -337,7 +351,7 @@ const OptiComAdmin = () => {
 
       <Tabs
         value={tab}
-        onValueChange={(v: string) => setTab(v as TabKey)}   // ✅ param en string
+        onValueChange={(v: string) => setTab(v as TabKey)}
         className="w-full"
       >
         <TabsList className="grid w-full grid-cols-5 mb-4">
@@ -349,10 +363,22 @@ const OptiComAdmin = () => {
         </TabsList>
 
         <TabsContent value="licences">
-          {/* <div className="mb-6 border rounded p-4">
-            <h3 className="font-medium mb-2">Créer une licence</h3>
-            <LicenceCreateForm />
-          </div> */}
+          {showCreate && (
+            <div className="mb-6 border rounded p-4">
+              <h3 className="font-medium mb-2">Créer une licence</h3>
+              <LicenceCreateForm />
+              <div className="mt-3">
+                <button
+                  onClick={handleReloadClick}
+                  className="text-sm border rounded px-3 py-1"
+                  title="Recharger la liste après création"
+                >
+                  🔄 Recharger la liste
+                </button>
+              </div>
+            </div>
+          )}
+
           {editing !== null ? (
             <OpticienDetailsPage
               opticien={opticiens[editing]}
