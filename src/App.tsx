@@ -1,7 +1,8 @@
-import { useState, lazy, Suspense } from 'react';
+// src/App.tsx
+import React, { useState, lazy, Suspense } from 'react';
 import HomePage from './HomePage';
 
-// Lazy loading des pages
+// Lazy load des pages
 const OptiComAdmin = lazy(() => import('./pages/OptiComAdmin'));
 const OptiMesureAdmin = lazy(() => import('./pages/OptiMesureAdmin'));
 
@@ -11,7 +12,6 @@ export default function App() {
   const [selectedApp, setSelectedApp] = useState<SelectedApp>(null);
 
   if (!selectedApp) {
-    // Home: passe le setter à HomePage comme avant
     return <HomePage onSelect={setSelectedApp} />;
   }
 
@@ -24,11 +24,7 @@ export default function App() {
           ← Retour
         </button>
 
-        {selectedApp === 'OptiCOM' ? (
-          <OptiComAdmin />
-        ) : (
-          <OptiMesureAdmin />
-        )}
+        {selectedApp === 'OptiCOM' ? <OptiComAdmin /> : <OptiMesureAdmin />}
       </div>
     </Suspense>
   );

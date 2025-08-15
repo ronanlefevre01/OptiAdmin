@@ -3,11 +3,14 @@ import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { AdresseBloc, normalize } from "./utils";
 
+// Union EXACTEMENT comme côté parent
+type InvoiceKind = "Abonnement" | "Achat de crédits" | "Autre";
+
 // Type “UI” compatible ancien (fichierPdf) + nouveau (urlPdf, numero)
 type FactureUI = {
   id: string;
   date: string;
-  type: string;
+  type: InvoiceKind;         // ⬅️  union, plus "string"
   details?: string;
   montant?: number;
   fichierPdf?: string;
@@ -15,15 +18,28 @@ type FactureUI = {
   numero?: string;
 };
 
+type AttachInvoiceInput = {
+  date: string;
+  type: InvoiceKind;         // ⬅️  union identique
+  details?: string;
+  montant?: number;
+  urlPdf: string;
+  numero?: string;
+};
+
 interface Props {
   opticiens: any[]; // données mixtes
-  onAttachInvoice?: (
-    opticienId: string,
-    facture: Omit<FactureUI, "id" | "fichierPdf">
-  ) => void;
+  onAttachInvoice?: (opticienId: string, facture: AttachInvoiceInput) => void;
 }
 
-function emptyForm() {
+function emptyForm(): {
+  numero?: string;
+  date: string;
+  type: InvoiceKind;         // ⬅️  union identique
+  details?: string;
+  montant?: string;          // champ texte côté UI
+  urlPdf: string;
+} {
   return {
     numero: "",
     date: new Date().toISOString().slice(0, 10),
@@ -31,13 +47,6 @@ function emptyForm() {
     details: "",
     montant: "",
     urlPdf: "",
-  } as {
-    numero?: string;
-    date: string;
-    type: string;
-    details?: string;
-    montant?: string;
-    urlPdf: string;
   };
 }
 
@@ -47,7 +56,12 @@ const InvoicesTab: React.FC<Props> = ({ opticiens, onAttachInvoice }) => {
   const ensureForm = (id: string) => {
     if (!forms[id]) setForms((prev) => ({ ...prev, [id]: emptyForm() }));
   };
-  const setField = (id: string, field: keyof ReturnType<typeof emptyForm>, value: string) => {
+
+  const setField = (
+    id: string,
+    field: keyof ReturnType<typeof emptyForm>,
+    value: string
+  ) => {
     setForms((prev) => ({ ...prev, [id]: { ...prev[id], [field]: value } }));
   };
 
@@ -64,9 +78,12 @@ const InvoicesTab: React.FC<Props> = ({ opticiens, onAttachInvoice }) => {
     onAttachInvoice?.(opticienId, {
       numero: f.numero || undefined,
       date: f.date,
-      type: f.type,
+      type: f.type, // InvoiceKind
       details: f.details || undefined,
-      montant: typeof montantNumber === "number" && !isNaN(montantNumber) ? montantNumber : undefined,
+      montant:
+        typeof montantNumber === "number" && !isNaN(montantNumber)
+          ? montantNumber
+          : undefined,
       urlPdf: f.urlPdf,
     });
 
@@ -80,7 +97,6 @@ const InvoicesTab: React.FC<Props> = ({ opticiens, onAttachInvoice }) => {
         const form = forms[n.id] || emptyForm();
         const factures = Array.isArray(raw?.factures) ? raw.factures : [];
 
-        // URL download
         const toHref = (f: FactureUI) =>
           f.urlPdf
             ? f.urlPdf
@@ -143,7 +159,9 @@ const InvoicesTab: React.FC<Props> = ({ opticiens, onAttachInvoice }) => {
                   </tbody>
                 </table>
               ) : (
-                <p className="text-muted-foreground italic mb-4">Aucune facture enregistrée.</p>
+                <p className="text-muted-foreground italic mb-4">
+                  Aucune facture enregistrée.
+                </p>
               )}
 
               {/* Attacher une facture EXISTANTE (URL complète) */}
@@ -180,7 +198,7 @@ const InvoicesTab: React.FC<Props> = ({ opticiens, onAttachInvoice }) => {
                     <select
                       className="w-full border rounded p-2"
                       value={form.type}
-                      onChange={(e) => setField(n.id, "type", e.target.value)}
+                      onChange={(e) => setField(n.id, "type", e.target.value as InvoiceKind)}
                       onFocus={() => ensureForm(n.id)}
                     >
                       <option value="Achat de crédits">Achat de crédits</option>

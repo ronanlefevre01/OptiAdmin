@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+/// <reference types="vite/client" />
+import { useEffect, useState } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import { FileText, Package, Repeat, BarChart, FolderOpen } from "lucide-react";
 
@@ -8,10 +9,8 @@ import CreditsTab from "./tabs/CreditsTab";
 import SubscriptionsTab from "./tabs/SubscriptionsTab";
 import SmsUsageTab from "./tabs/SmsUsageTab";
 import InvoicesTab from "./tabs/InvoicesTab";
+// import LicenceCreateForm from "../components/LicenceCreateForm";
 
-// =============================
-// Interfaces
-// =============================
 export interface AchatCredit {
   date: string;
   montant: number;
@@ -54,23 +53,18 @@ export interface Opticien {
   factures?: Facture[];
 }
 
-// =============================
-// ENV + clients API
-// =============================
-const viteEnv = (typeof import.meta !== "undefined" && (import.meta as any).env) || {};
-const procEnv = (typeof process !== "undefined" && (process as any).env) || {};
+type TabKey = "licences" | "credits" | "subscriptions" | "sms" | "invoices";
 
-const API_BASE: string =
-  viteEnv.VITE_SERVER_BASE || procEnv.VITE_SERVER_BASE || "https://opticom-sms-server.onrender.com";
+/* ====== ENV (Vite) ====== */
+const V = (import.meta as any).env as Record<string, string | undefined>;
+const API_BASE =
+  (V.VITE_SERVER_URL || V.VITE_SERVER_BASE || "https://opticom-sms-server.onrender.com") as string;
 
-const JSONBIN_BASE: string =
-  viteEnv.VITE_JSONBIN_BASE || procEnv.VITE_JSONBIN_BASE || "https://api.jsonbin.io/v3";
-const JSONBIN_MASTER_KEY: string | undefined =
-  viteEnv.VITE_JSONBIN_MASTER_KEY || procEnv.VITE_JSONBIN_MASTER_KEY;
-const JSONBIN_OPTICOM_BIN_ID: string =
-  viteEnv.VITE_JSONBIN_OPTICOM_BIN_ID || procEnv.VITE_JSONBIN_OPTICOM_BIN_ID || "";
+const JSONBIN_BASE = "https://api.jsonbin.io/v3";
+const JSONBIN_MASTER_KEY: string | undefined = V.VITE_JSONBIN_MASTER_KEY; // public si utilisé côté front
+const JSONBIN_OPTICOM_BIN_ID: string = (V.VITE_JSONBIN_OPTICOM_BIN_ID || "") as string;
 
-// --- API serveur : /api/licences (fallback /licences.json)
+/* ====== API helpers ====== */
 async function fetchServerLicences(): Promise<any[]> {
   const urls = [`${API_BASE}/api/licences`, `${API_BASE}/licences.json`];
   for (const url of urls) {
@@ -80,14 +74,11 @@ async function fetchServerLicences(): Promise<any[]> {
         const data = await r.json();
         return Array.isArray(data) ? data : data ? [data] : [];
       }
-    } catch {
-      /* try next */
-    }
+    } catch {}
   }
   throw new Error("Aucun endpoint de licences côté serveur");
 }
 
-// --- JSONBin helpers ---
 async function jsonbinGet<T>(binId: string): Promise<T> {
   const headers: Record<string, string> = { "X-Bin-Meta": "false" };
   if (JSONBIN_MASTER_KEY) headers["X-Master-Key"] = JSONBIN_MASTER_KEY;
@@ -114,7 +105,7 @@ async function jsonbinPut<T>(binId: string, record: T): Promise<T> {
     throw new Error(`JSONBin PUT ${r.status} ${txt}`);
   }
   const j = await r.json();
-  return j.record as T;
+  return (j.record ?? record) as T;
 }
 async function loadOpticiens(): Promise<any[]> {
   if (!JSONBIN_OPTICOM_BIN_ID) throw new Error("VITE_JSONBIN_OPTICOM_BIN_ID manquant");
@@ -126,21 +117,10 @@ async function saveOpticiens(list: any[]): Promise<any[]> {
   return jsonbinPut<any[]>(JSONBIN_OPTICOM_BIN_ID, list);
 }
 
-// =============================
-// Helpers CGV
-// =============================
-
-// Tente de récupérer l'identifiant de licence attendu par /licence/cgv-status
+/* ====== CGV helpers ====== */
 function getLicenceId(o: any) {
-  return String(
-    o?.id ||            // schéma courant côté serveur
-    o?.licence ||       // anciens schémas
-    o?.opticien?.id ||  // éventuels schémas imbriqués
-    ""
-  );
+  return String(o?.id || o?.licence || o?.opticien?.id || "");
 }
-
-// Décore chaque entrée avec cgvAccepted / versions
 async function decorateWithCgvStatus(list: any[]) {
   const rows = await Promise.all(
     list.map(async (o) => {
@@ -167,22 +147,19 @@ async function decorateWithCgvStatus(list: any[]) {
   return rows;
 }
 
-// =============================
-// Composant principal
-// =============================
+/* ====== Component ====== */
 const OptiComAdmin = () => {
   const [opticiens, setOpticiens] = useState<any[]>([]);
   const [editing, setEditing] = useState<number | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
-  const [tab, setTab] = useState<"licences" | "credits" | "subscriptions" | "sms" | "invoices">("licences");
+  const [tab, setTab] = useState<TabKey>("licences");
 
   useEffect(() => {
     (async () => {
       await reloadFromRemote();
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function reloadFromRemote() {
@@ -190,18 +167,14 @@ const OptiComAdmin = () => {
       setLoading(true);
       setError(null);
 
-      // 1) Serveur
       try {
         const fromApi = await fetchServerLicences();
         const withCgv = await decorateWithCgvStatus(fromApi);
         setOpticiens(withCgv);
         localStorage.setItem("opticom", JSON.stringify(withCgv));
         return;
-      } catch {
-        /* fallback */
-      }
+      } catch {}
 
-      // 2) JSONBin
       const remote = await loadOpticiens();
       const withCgv = await decorateWithCgvStatus(remote);
       setOpticiens(withCgv);
@@ -227,7 +200,6 @@ const OptiComAdmin = () => {
     }
   }
 
-  // Boutons Reload
   const handleReloadClick = async () => {
     setReloading(true);
     await reloadFromRemote();
@@ -238,9 +210,7 @@ const OptiComAdmin = () => {
     await handleReloadClick();
   };
 
-  // Sauvegarde centralisée
   const saveToStorage = async (list: any[]) => {
-    // on garde la liste enrichie CGV pour l’UI + cache
     const withCgv = await decorateWithCgvStatus(list);
     setOpticiens(withCgv);
     localStorage.setItem("opticom", JSON.stringify(withCgv));
@@ -316,15 +286,24 @@ const OptiComAdmin = () => {
 
   const handleAttachInvoice = (
     opticienId: string,
-    facture: { date: string; type: "Abonnement" | "Achat de crédits" | "Autre"; details?: string; montant?: number; urlPdf: string; numero?: string }
+    facture: {
+      date: string;
+      type: "Abonnement" | "Achat de crédits" | "Autre";
+      details?: string;
+      montant?: number;
+      urlPdf: string;
+      numero?: string;
+    }
   ) => {
     const updated = opticiens.map((opt: any) => {
       if (opt.id !== opticienId) return opt;
       const factures = Array.isArray(opt.factures) ? opt.factures : [];
+
       const safeId =
-        typeof crypto !== "undefined" && (crypto as any).randomUUID
-          ? (crypto as any).randomUUID()
+        typeof window !== "undefined" && window.crypto?.randomUUID
+          ? window.crypto.randomUUID()
           : Math.random().toString(36).slice(2) + Date.now().toString(36);
+
       const rec: Facture = { id: safeId, ...facture };
       return { ...opt, factures: [rec, ...factures] };
     });
@@ -356,7 +335,11 @@ const OptiComAdmin = () => {
       {loading && <div className="mb-4">Chargement des données…</div>}
       {error && <div className="mb-4 text-red-600">{error}</div>}
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as any)} className="w-full">
+      <Tabs
+        value={tab}
+        onValueChange={(v: string) => setTab(v as TabKey)}   // ✅ param en string
+        className="w-full"
+      >
         <TabsList className="grid w-full grid-cols-5 mb-4">
           <TabsTrigger value="licences"><FileText className="mr-2 h-4 w-4" /> Licences</TabsTrigger>
           <TabsTrigger value="credits"><Package className="mr-2 h-4 w-4" /> Crédits</TabsTrigger>
@@ -366,8 +349,16 @@ const OptiComAdmin = () => {
         </TabsList>
 
         <TabsContent value="licences">
+          {/* <div className="mb-6 border rounded p-4">
+            <h3 className="font-medium mb-2">Créer une licence</h3>
+            <LicenceCreateForm />
+          </div> */}
           {editing !== null ? (
-            <OpticienDetailsPage opticien={opticiens[editing]} onSave={handleSave} onCancel={handleCancel} />
+            <OpticienDetailsPage
+              opticien={opticiens[editing]}
+              onSave={handleSave}
+              onCancel={handleCancel}
+            />
           ) : (
             <LicencesTab
               opticiens={opticiens}
@@ -384,7 +375,11 @@ const OptiComAdmin = () => {
         </TabsContent>
 
         <TabsContent value="subscriptions">
-          <SubscriptionsTab opticiens={opticiens} onUpdateAbonnement={handleUpdateAbonnement} onCancelAbonnement={handleCancelAbonnement} />
+          <SubscriptionsTab
+            opticiens={opticiens}
+            onUpdateAbonnement={handleUpdateAbonnement}
+            onCancelAbonnement={handleCancelAbonnement}
+          />
         </TabsContent>
 
         <TabsContent value="sms">
