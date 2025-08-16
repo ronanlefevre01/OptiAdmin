@@ -69,8 +69,8 @@ type Feedback = {
   platform?: string;
   createdAt: string;
   status: FeedbackStatus;
-  adminNotes?: string;
-  handledBy?: string;
+  adminNotes?: string;   // ⚠️ non persisté côté /support
+  handledBy?: string;    // ⚠️ non persisté côté /support
 };
 
 type TabKey =
@@ -92,8 +92,8 @@ const JSONBIN_BASE = "https://api.jsonbin.io/v3";
 const JSONBIN_MASTER_KEY: string | undefined = V.VITE_JSONBIN_MASTER_KEY;
 const JSONBIN_OPTICOM_BIN_ID: string = (V.VITE_JSONBIN_OPTICOM_BIN_ID || "") as string;
 
-/* Admin token (pour endpoints protégés) */
-const ADMIN_TOKEN_KEY = "ADMIN_UPLOAD_TOKEN";
+/* Admin token (pour endpoints protégés /support) */
+const ADMIN_TOKEN_KEY = "ADMIN_FEEDBACK_TOKEN";
 const getAdminToken = () => localStorage.getItem(ADMIN_TOKEN_KEY) || "";
 const setAdminToken = (t: string) => localStorage.setItem(ADMIN_TOKEN_KEY, t.trim());
 
@@ -107,9 +107,7 @@ async function fetchServerLicences(): Promise<any[]> {
         const data = await r.json();
         return Array.isArray(data) ? data : data ? [data] : [];
       }
-    } catch {
-      /* try next */
-    }
+    } catch { /* try next */ }
   }
   throw new Error("Aucun endpoint de licences côté serveur");
 }
@@ -182,7 +180,32 @@ async function decorateWithCgvStatus(list: any[]) {
   return rows;
 }
 
-/* ====== API helpers Feedback (admin) ====== */
+/* ====== Feedback helpers (support) ====== */
+const mapClientToServerStatut = (s: FeedbackStatus): string =>
+  s === "open" ? "nouveau" : s === "closed" ? "traite" : "en_cours";
+
+const mapServerToClientStatus = (statut?: string): FeedbackStatus => {
+  const v = String(statut || "").toLowerCase();
+  if (v === "traite") return "closed";
+  if (v === "en_cours") return "in_progress";
+  return "open"; // "nouveau" ou défaut
+};
+
+function normalizeSupportItem(it: any): Feedback {
+  return {
+    id: String(it.id),
+    licenceId: it.licenceId || it.licence || "",
+    subject: it.subject || it.objet || "",
+    message: it.message || "",
+    email: it.email || it.emailLicence || "",
+    platform: it.platform || "",
+    createdAt: it.date || it.createdAt || new Date().toISOString(),
+    status: mapServerToClientStatus(it.statut || it.status),
+    adminNotes: it.adminNotes || "",
+    handledBy: it.handledBy || "",
+  };
+}
+
 async function fetchFeedbackList(params: {
   status?: "" | FeedbackStatus;
   limit?: number;
@@ -190,9 +213,13 @@ async function fetchFeedbackList(params: {
 }) {
   const t = getAdminToken();
   const status = params.status ?? "open";
-  const url = `${API_BASE}/api/admin/feedback?status=${encodeURIComponent(
-    status || ""
+  const serverStatus =
+    status === "" ? "" : mapClientToServerStatut(status as FeedbackStatus);
+
+  const url = `${API_BASE}/support/messages?status=${encodeURIComponent(
+    serverStatus
   )}&limit=${params.limit ?? 100}&q=${encodeURIComponent(params.q || "")}`;
+
   const r = await fetch(url, {
     headers: { Authorization: `Bearer ${t}` },
     cache: "no-store",
@@ -202,29 +229,37 @@ async function fetchFeedbackList(params: {
     throw new Error(`${r.status} ${txt}`);
   }
   const j = await r.json();
-  // backend peut renvoyer {items,total} ou directement []
-  if (Array.isArray(j)) return { items: j as Feedback[], total: j.length };
-  return {
-    items: (j.items || []) as Feedback[],
-    total: Number(j.total || (j.items?.length ?? 0)),
-  };
+  const raw = Array.isArray(j) ? j : Array.isArray(j.items) ? j.items : [];
+  const items = (raw as any[]).map(normalizeSupportItem);
+  return { items, total: Number(j.total || items.length) };
 }
 
-async function patchFeedback(id: string, patch: Partial<Feedback>) {
+async function patchFeedback(item: Feedback, patch: Partial<Feedback>) {
+  // NB: /support/messages/update ne persiste que "statut"; notes/handledBy non gérés côté serveur pour le moment.
   const t = getAdminToken();
-  const r = await fetch(`${API_BASE}/api/admin/feedback/${encodeURIComponent(id)}`, {
-    method: "PATCH",
+  const statut = mapClientToServerStatut(patch.status || item.status);
+  const body = {
+    licenceId: item.licenceId || "",
+    id: item.id,
+    statut,
+  };
+  const r = await fetch(`${API_BASE}/support/messages/update`, {
+    method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${t}`,
     },
-    body: JSON.stringify(patch),
+    body: JSON.stringify(body),
   });
   if (!r.ok) {
     const txt = await r.text().catch(() => "");
     throw new Error(`${r.status} ${txt}`);
   }
-  return (await r.json()) as { ok: boolean; item: Feedback };
+  // On renvoie un objet Feedback mis à jour localement (status à jour).
+  return {
+    ok: true,
+    item: { ...item, status: patch.status || item.status } as Feedback,
+  };
 }
 
 /* ====== Component ====== */
@@ -265,9 +300,7 @@ const OptiComAdmin = () => {
         setOpticiens(withCgv);
         localStorage.setItem("opticom", JSON.stringify(withCgv));
         return;
-      } catch {
-        /* fallback */
-      }
+      } catch { /* fallback */ }
 
       // 2) JSONBin
       const remote = await loadOpticiens();
@@ -431,10 +464,10 @@ const OptiComAdmin = () => {
   useEffect(() => {
     if (tab !== "feedback") return;
     loadFeedback();
-    const t = setInterval(loadFeedback, 10000); // refresh auto 10s
+    const t = setInterval(loadFeedback, 10000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, effectiveStatus]);
+  }, [tab, effectiveStatus, fbQuery]);
 
   return (
     <div className="p-6">
@@ -545,7 +578,7 @@ const OptiComAdmin = () => {
               <span className="text-sm opacity-80">Token admin&nbsp;:</span>
               <input
                 className="text-sm border rounded px-2 py-1 w-[340px]"
-                placeholder="ADMIN_UPLOAD_TOKEN"
+                placeholder="ADMIN_FEEDBACK_TOKEN"
                 value={adminTok}
                 onChange={(e) => setAdminTok(e.target.value)}
               />
@@ -671,12 +704,12 @@ function FeedbackModal({
   const save = async () => {
     try {
       setSaving(true);
-      const r = await patchFeedback(item.id, {
+      const r = await patchFeedback(item, {
         status,
         adminNotes: notes,
         handledBy: who,
       });
-      if (r?.item) onSaved(r.item);
+      if ((r as any)?.item) onSaved((r as any).item);
       onClose();
     } catch (e: any) {
       alert("Erreur: " + e.message);
