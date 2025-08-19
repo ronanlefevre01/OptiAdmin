@@ -15,6 +15,24 @@ type FormState = {
 function onlyAZ09(s: string) {
   return s.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
+function onlyDigits(s: string) {
+  return String(s || "").replace(/\D/g, "");
+}
+
+// ===== API BASE -> Render (via env), avec fallback =====
+const V = (import.meta as any).env || {};
+const API_BASE = String(
+  V.VITE_SERVER_URL ||
+    V.VITE_SERVER_BASE ||
+    "https://opticom-sms-server.onrender.com"
+).replace(/\/$/, "");
+
+// Optionnel : mapper "basic/pro/unlimited" vers ton libellé serveur
+const PLAN_MAP: Record<FormState["plan"], string> = {
+  basic: "starter",
+  pro: "pro",
+  unlimited: "premium",
+};
 
 export default function LicenceCreateForm() {
   const [form, setForm] = useState<FormState>({
@@ -37,29 +55,104 @@ export default function LicenceCreateForm() {
     e?.preventDefault();
     setLoading(true);
     setMsg(null);
+
+    // Normalisations
+    const sender = onlyAZ09(form.sender);
+    const siret = onlyDigits(form.siret);
+    const credits = Number(form.credits) || 0;
+
+    // On envoie les champs sous plusieurs noms usuels pour être compatible
+    const payload = {
+      // noms d’enseigne
+      name: form.name,
+      enseigne: form.name,
+
+      // SIRET
+      siret,
+
+      // expéditeur
+      sender,
+      libelleExpediteur: sender,
+
+      // plan / formule
+      plan: PLAN_MAP[form.plan] ?? form.plan,          // ex. "starter" | "pro" | "premium"
+      formule:
+        PLAN_MAP[form.plan] === "starter"
+          ? "Starter"
+          : PLAN_MAP[form.plan] === "pro"
+          ? "Pro"
+          : "Premium",
+
+      // crédits
+      credits,
+      creditsInitiaux: credits,
+
+      // contact
+      contact: {
+        name: form.contactName || undefined,
+        email: form.contactEmail || undefined,
+        phone: form.contactPhone || undefined,
+      },
+      contactNom: form.contactName || undefined,
+      contactEmail: form.contactEmail || undefined,
+      contactTelephone: form.contactPhone || undefined,
+    };
+
+    // Plusieurs endpoints possibles côté Render (garde celui qui marche et vire les autres)
+    const endpoints = [
+      `${API_BASE}/api/admin/licences`,
+      `${API_BASE}/admin/licences`,
+      `${API_BASE}/api/licences/create`,
+    ];
+
     try {
-      const res = await fetch("/api/licences/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: form.name,
-          siret: form.siret || undefined,
-          sender: onlyAZ09(form.sender),
-          plan: form.plan,
-          credits: Number(form.credits) || 0,
-          contact: {
-            name: form.contactName || undefined,
-            email: form.contactEmail || undefined,
-            phone: form.contactPhone || undefined,
-          },
-        }),
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j?.error || `HTTP ${res.status}`);
-      setMsg(`✅ Licence créée: ${j.licence?.id} — expéditeur ${j.licence?.sender}`);
-      setForm((f) => ({ ...f, name: "", siret: "", sender: "", credits: 0 }));
+      let ok = false;
+      let lastStatus = 0;
+      let lastText = "";
+      let lastUrl = "";
+
+      for (const url of endpoints) {
+        lastUrl = url;
+        try {
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+            mode: "cors",
+          });
+
+          lastStatus = res.status;
+          const isJson = res.headers.get("content-type")?.includes("application/json");
+          const data = isJson ? await res.json().catch(() => ({})) : await res.text();
+
+          if (res.ok) {
+            const lic = (isJson ? (data as any)?.licence : null) || {};
+            setMsg(
+              `✅ Licence créée${lic?.id ? `: ${lic.id}` : ""}${
+                lic?.sender ? ` — expéditeur ${lic.sender}` : ""
+              }`
+            );
+            ok = true;
+            // Reset minimal
+            setForm((f) => ({ ...f, name: "", siret: "", sender: "", credits: 0 }));
+            break;
+          } else {
+            lastText =
+              (isJson ? (data as any)?.error : data) ||
+              `HTTP ${res.status}`;
+          }
+        } catch (e: any) {
+          lastText = e?.message || String(e);
+        }
+      }
+
+      if (!ok) {
+        throw new Error(
+          `Échec création licence (dernier essai: ${lastUrl}, status ${lastStatus}) — ${lastText}`
+        );
+      }
     } catch (e: any) {
-      setMsg(`❌ ${e.message}`);
+      setMsg(`❌ ${e?.message || "Erreur lors de la création."}`);
     } finally {
       setLoading(false);
     }
@@ -83,6 +176,7 @@ export default function LicenceCreateForm() {
         <input
           value={form.siret}
           onChange={(e) => setForm((f) => ({ ...f, siret: e.target.value }))}
+          placeholder="14 chiffres"
         />
       </label>
       <br />
@@ -168,6 +262,11 @@ export default function LicenceCreateForm() {
       </button>
 
       {msg && <p style={{ marginTop: 8 }}>{msg}</p>}
+
+      {/* Petite indication utile en debug */}
+      <div style={{ marginTop: 8, fontSize: 12, opacity: 0.6 }}>
+        API: <code>{API_BASE}</code>
+      </div>
     </form>
   );
 }
