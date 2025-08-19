@@ -1,5 +1,5 @@
 // src/components/LicenceCreateForm.tsx
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 
 type FormState = {
   name: string;
@@ -13,7 +13,7 @@ type FormState = {
 };
 
 function onlyAZ09(s: string) {
-  return s.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 function onlyDigits(s: string) {
   return String(s || "").replace(/\D/g, "");
@@ -25,9 +25,11 @@ const API_BASE = String(
     V.VITE_SERVER_BASE ||
     "https://opticom-sms-server.onrender.com"
 ).replace(/\/$/, "");
-const ADMIN_TOKEN_KEY = "ADMIN_FEEDBACK_TOKEN";
 
-const PLAN_MAP: Record<FormState["plan"], string> = {
+const ENV_ADMIN_TOKEN = String(V.VITE_ADMIN_TOKEN || "");
+const LOCALSTORAGE_TOKEN_KEY = "ADMIN_FEEDBACK_TOKEN";
+
+const PLAN_MAP: Record<FormState["plan"], "starter" | "pro" | "premium"> = {
   basic: "starter",
   pro: "pro",
   unlimited: "premium",
@@ -46,30 +48,34 @@ export default function LicenceCreateForm() {
   });
   const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [lastTriedUrl, setLastTriedUrl] = useState<string>("");
 
-  const validSender = form.sender.length >= 3 && form.sender.length <= 11;
-  const canSubmit = !!form.name && validSender && !loading;
+  const senderClean = useMemo(() => onlyAZ09(form.sender), [form.sender]);
+  const siretClean = useMemo(() => onlyDigits(form.siret), [form.siret]);
+
+  const validSender = senderClean.length >= 3 && senderClean.length <= 11;
+  const validSiret = siretClean.length === 0 || siretClean.length === 14; // facultatif, mais s'il est rempli → 14 chiffres
+  const canSubmit = !!form.name && validSender && validSiret && !loading;
 
   async function submit(e?: React.FormEvent) {
     e?.preventDefault();
     setLoading(true);
     setMsg(null);
 
-    const sender = onlyAZ09(form.sender);
-    const siret = onlyDigits(form.siret);
-    const credits = Number(form.credits) || 0;
-    const token = localStorage.getItem(ADMIN_TOKEN_KEY) || "";
+    const token =
+      ENV_ADMIN_TOKEN || localStorage.getItem(LOCALSTORAGE_TOKEN_KEY) || "";
 
     const payload = {
+      // champs "serveur" probables
       name: form.name,
       enseigne: form.name,
 
-      siret,
+      siret: siretClean || undefined,
 
-      sender,
-      libelleExpediteur: sender,
+      sender: senderClean,
+      libelleExpediteur: senderClean,
 
-      plan: PLAN_MAP[form.plan] ?? form.plan, // starter|pro|premium
+      plan: PLAN_MAP[form.plan], // starter | pro | premium (slug)
       formule:
         PLAN_MAP[form.plan] === "starter"
           ? "Starter"
@@ -77,36 +83,39 @@ export default function LicenceCreateForm() {
           ? "Pro"
           : "Premium",
 
-      credits,
-      creditsInitiaux: credits,
+      credits: Number(form.credits) || 0,
+      creditsInitiaux: Number(form.credits) || 0,
 
       contact: {
         name: form.contactName || undefined,
         email: form.contactEmail || undefined,
         phone: form.contactPhone || undefined,
       },
+
+      // doublons “compat” si le backend utilise ces noms
       contactNom: form.contactName || undefined,
       contactEmail: form.contactEmail || undefined,
       contactTelephone: form.contactPhone || undefined,
     };
 
-    // Priorité : POST /api/licences (puis fallbacks)
+    // Priorité: /api/admin/licences → /admin/licences → /api/licences (legacy)
     const endpoints = [
-      `${API_BASE}/api/licences`,
-      `${API_BASE}/admin/licences`,
       `${API_BASE}/api/admin/licences`,
+      `${API_BASE}/admin/licences`,
+      `${API_BASE}/api/licences`,
     ];
 
     try {
-      let ok = false;
-      let lastUrl = "";
+      let success = false;
       let lastStatus = 0;
-      let lastText = "";
+      let lastBody = "";
 
       for (const url of endpoints) {
-        lastUrl = url;
+        setLastTriedUrl(url);
         try {
-          const headers: Record<string, string> = { "Content-Type": "application/json" };
+          const headers: Record<string, string> = {
+            "Content-Type": "application/json",
+          };
           if (token) headers.Authorization = `Bearer ${token}`;
 
           const res = await fetch(url, {
@@ -114,34 +123,40 @@ export default function LicenceCreateForm() {
             headers,
             body: JSON.stringify(payload),
             mode: "cors",
+            credentials: "omit",
           });
 
           lastStatus = res.status;
-          const isJson = res.headers.get("content-type")?.includes("application/json");
+          const isJson =
+            res.headers.get("content-type")?.includes("application/json") ||
+            false;
           const data = isJson ? await res.json().catch(() => ({})) : await res.text();
 
           if (res.ok) {
             const lic = (isJson ? (data as any)?.licence : null) || {};
             setMsg(
-              `✅ Licence créée${lic?.id ? `: ${lic.id}` : ""}${
-                lic?.sender ? ` — expéditeur ${lic.sender}` : ""
-              }`
+              `✅ Licence créée${
+                lic?.id ? `: ${lic.id}` : ""
+              }${lic?.sender ? ` — expéditeur ${lic.sender}` : ""}`
             );
-            ok = true;
+            success = true;
+            // reset “léger”
             setForm((f) => ({ ...f, name: "", siret: "", sender: "", credits: 0 }));
             break;
           } else {
-            lastText =
+            lastBody =
               (isJson ? (data as any)?.error : data) || `HTTP ${res.status}`;
+            // essaie endpoint suivant
           }
-        } catch (e: any) {
-          lastText = e?.message || String(e);
+        } catch (err: any) {
+          lastBody = err?.message || String(err);
+          // essaie endpoint suivant
         }
       }
 
-      if (!ok) {
+      if (!success) {
         throw new Error(
-          `Échec création licence (dernier essai: ${lastUrl}, status ${lastStatus}) — ${lastText}`
+          `Échec création licence (dernier essai: ${lastTriedUrl}, status ${lastStatus}) — ${lastBody}`
         );
       }
     } catch (e: any) {
@@ -152,7 +167,7 @@ export default function LicenceCreateForm() {
   }
 
   return (
-    <form onSubmit={submit} style={{ maxWidth: 520, padding: 16 }}>
+    <form onSubmit={submit} style={{ maxWidth: 560, padding: 16 }}>
       <h2>Créer une licence</h2>
 
       <label>
@@ -169,9 +184,12 @@ export default function LicenceCreateForm() {
         <input
           value={form.siret}
           onChange={(e) => setForm((f) => ({ ...f, siret: e.target.value }))}
-          placeholder="14 chiffres"
+          placeholder="14 chiffres (facultatif)"
         />
       </label>
+      {!validSiret && (
+        <div style={{ color: "#b00" }}>Le SIRET doit contenir 14 chiffres.</div>
+      )}
       <br />
 
       <label>
@@ -211,11 +229,13 @@ export default function LicenceCreateForm() {
           onChange={(e) =>
             setForm((f) => ({ ...f, credits: Number(e.target.value) }))
           }
+          min={0}
         />
       </label>
 
       <fieldset style={{ marginTop: 12 }}>
         <legend>Contact</legend>
+
         <label>
           Nom<br />
           <input
@@ -226,6 +246,7 @@ export default function LicenceCreateForm() {
           />
         </label>
         <br />
+
         <label>
           Email<br />
           <input
@@ -236,6 +257,7 @@ export default function LicenceCreateForm() {
           />
         </label>
         <br />
+
         <label>
           Téléphone<br />
           <input
@@ -251,10 +273,16 @@ export default function LicenceCreateForm() {
         {loading ? "Création…" : "Créer la licence"}
       </button>
 
-      {msg && <p style={{ marginTop: 8 }}>{msg}</p>}
+      {msg && <p style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>{msg}</p>}
 
       <div style={{ marginTop: 8, fontSize: 12, opacity: 0.6 }}>
         API: <code>{API_BASE}</code>
+        {lastTriedUrl ? (
+          <>
+            {" "}
+            • Dernier endpoint: <code>{lastTriedUrl}</code>
+          </>
+        ) : null}
       </div>
     </form>
   );
