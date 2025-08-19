@@ -103,6 +103,11 @@ const API_BASE =
     V.VITE_SERVER_BASE ||
     "https://opticom-sms-server.onrender.com") as string;
 
+const ADMIN_BASE = (
+  V.VITE_ADMIN_BASE ||
+  (typeof window !== "undefined" ? window.location.origin : "")
+).replace(/\/$/, "");
+
 const JSONBIN_BASE = "https://api.jsonbin.io/v3";
 const JSONBIN_MASTER_KEY: string | undefined = V.VITE_JSONBIN_MASTER_KEY;
 const JSONBIN_OPTICOM_BIN_ID: string = (V.VITE_JSONBIN_OPTICOM_BIN_ID || "") as string;
@@ -294,22 +299,34 @@ async function fetchTrialRequests(params: { status?: "" | TrialStatus; limit?: n
   const t = getAdminToken();
   const q = params.q || "";
   const status = params.status ?? "";
-  const urls = [
-    `${API_BASE}/trial-requests?status=${encodeURIComponent(status)}&limit=${params.limit ?? 200}&q=${encodeURIComponent(q)}`,
-    `${API_BASE}/api/trial-requests?status=${encodeURIComponent(status)}&limit=${params.limit ?? 200}&q=${encodeURIComponent(q)}`,
-    `${API_BASE}/trial-requests.json`,
-  ];
+
+  // 1) Vercel (ADMIN_BASE), 2) Render (API_BASE)
+  const bases = [ADMIN_BASE, API_BASE].filter(Boolean);
+  const urls: string[] = [];
+  for (const b of bases) {
+    urls.push(
+      `${b}/api/trial-requests?status=${encodeURIComponent(status)}&limit=${params.limit ?? 200}&q=${encodeURIComponent(q)}`
+    );
+    urls.push(
+      `${b}/trial-requests?status=${encodeURIComponent(status)}&limit=${params.limit ?? 200}&q=${encodeURIComponent(q)}`
+    );
+  }
+  // très dernier recours (mock éventuel)
+  urls.push(`/trial-requests.json`);
+
   for (const url of urls) {
     try {
       const r = await fetch(url, {
-        headers: { Authorization: `Bearer ${t}` },
+        headers: t ? { Authorization: `Bearer ${t}` } : undefined,
         cache: "no-store",
       });
       if (!r.ok) continue;
       const j = await r.json();
-      const raw = Array.isArray(j) ? j : Array.isArray(j.items) ? j.items : [];
+      const raw = Array.isArray(j) ? j : Array.isArray((j as any).items) ? (j as any).items : [];
       return raw.map(normalizeTrial) as TrialRequest[];
-    } catch { /* try next */ }
+    } catch {
+      // try next
+    }
   }
   return [];
 }
