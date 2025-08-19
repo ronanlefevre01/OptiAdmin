@@ -1,15 +1,15 @@
 // src/components/LicenceCreateForm.tsx
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 
-type FormState = {
+export type NewLicenceInput = {
   name: string;
-  siret: string;
-  sender: string;
+  siret?: string;
+  sender: string;                 // alias expéditeur (A-Z 0-9)
   plan: "basic" | "pro" | "unlimited";
   credits: number;
-  contactName: string;
-  contactEmail: string;
-  contactPhone: string;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
 };
 
 function onlyAZ09(s: string) {
@@ -18,25 +18,23 @@ function onlyAZ09(s: string) {
 function onlyDigits(s: string) {
   return String(s || "").replace(/\D/g, "");
 }
+function mapFormuleToPlan(v?: string): NewLicenceInput["plan"] {
+  const s = String(v || "").toLowerCase();
+  if (s === "pro") return "pro";
+  if (s === "premium" || s === "unlimited") return "unlimited";
+  if (s === "starter" || s === "basic") return "basic";
+  return "basic";
+}
+function mapPlanToFormule(v: NewLicenceInput["plan"]) {
+  return v === "pro" ? "Pro" : v === "unlimited" ? "Premium" : "Starter";
+}
 
-const V = (import.meta as any).env || {};
-const API_BASE = String(
-  V.VITE_SERVER_URL ||
-    V.VITE_SERVER_BASE ||
-    "https://opticom-sms-server.onrender.com"
-).replace(/\/$/, "");
-
-const ENV_ADMIN_TOKEN = String(V.VITE_ADMIN_TOKEN || "");
-const LOCALSTORAGE_TOKEN_KEY = "ADMIN_FEEDBACK_TOKEN";
-
-const PLAN_MAP: Record<FormState["plan"], "starter" | "pro" | "premium"> = {
-  basic: "starter",
-  pro: "pro",
-  unlimited: "premium",
+type Props = {
+  onCreate: (data: NewLicenceInput) => Promise<void> | void;
 };
 
-export default function LicenceCreateForm() {
-  const [form, setForm] = useState<FormState>({
+export default function LicenceCreateForm({ onCreate }: Props) {
+  const [form, setForm] = useState<NewLicenceInput>({
     name: "",
     siret: "",
     sender: "",
@@ -48,117 +46,38 @@ export default function LicenceCreateForm() {
   });
   const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [lastTriedUrl, setLastTriedUrl] = useState<string>("");
 
-  const senderClean = useMemo(() => onlyAZ09(form.sender), [form.sender]);
-  const siretClean = useMemo(() => onlyDigits(form.siret), [form.siret]);
+  const senderPreview = onlyAZ09(form.sender);
+  const validSender =
+    senderPreview.length >= 3 &&
+    senderPreview.length <= 11 &&
+    /^[A-Z0-9]+$/.test(senderPreview);
 
-  const validSender = senderClean.length >= 3 && senderClean.length <= 11;
-  const validSiret = siretClean.length === 0 || siretClean.length === 14; // facultatif, mais s'il est rempli → 14 chiffres
-  const canSubmit = !!form.name && validSender && validSiret && !loading;
+  const canSubmit = !!form.name && validSender && !loading;
 
   async function submit(e?: React.FormEvent) {
     e?.preventDefault();
-    setLoading(true);
     setMsg(null);
-
-    const token =
-      ENV_ADMIN_TOKEN || localStorage.getItem(LOCALSTORAGE_TOKEN_KEY) || "";
-
-    const payload = {
-      // champs "serveur" probables
-      name: form.name,
-      enseigne: form.name,
-
-      siret: siretClean || undefined,
-
-      sender: senderClean,
-      libelleExpediteur: senderClean,
-
-      plan: PLAN_MAP[form.plan], // starter | pro | premium (slug)
-      formule:
-        PLAN_MAP[form.plan] === "starter"
-          ? "Starter"
-          : PLAN_MAP[form.plan] === "pro"
-          ? "Pro"
-          : "Premium",
-
-      credits: Number(form.credits) || 0,
-      creditsInitiaux: Number(form.credits) || 0,
-
-      contact: {
-        name: form.contactName || undefined,
-        email: form.contactEmail || undefined,
-        phone: form.contactPhone || undefined,
-      },
-
-      // doublons “compat” si le backend utilise ces noms
-      contactNom: form.contactName || undefined,
-      contactEmail: form.contactEmail || undefined,
-      contactTelephone: form.contactPhone || undefined,
-    };
-
-    // Priorité: /api/admin/licences → /admin/licences → /api/licences (legacy)
-    const endpoints = [
-      `${API_BASE}/api/admin/licences`,
-      `${API_BASE}/admin/licences`,
-      `${API_BASE}/api/licences`,
-    ];
-
+    setLoading(true);
     try {
-      let success = false;
-      let lastStatus = 0;
-      let lastBody = "";
-
-      for (const url of endpoints) {
-        setLastTriedUrl(url);
-        try {
-          const headers: Record<string, string> = {
-            "Content-Type": "application/json",
-          };
-          if (token) headers.Authorization = `Bearer ${token}`;
-
-          const res = await fetch(url, {
-            method: "POST",
-            headers,
-            body: JSON.stringify(payload),
-            mode: "cors",
-            credentials: "omit",
-          });
-
-          lastStatus = res.status;
-          const isJson =
-            res.headers.get("content-type")?.includes("application/json") ||
-            false;
-          const data = isJson ? await res.json().catch(() => ({})) : await res.text();
-
-          if (res.ok) {
-            const lic = (isJson ? (data as any)?.licence : null) || {};
-            setMsg(
-              `✅ Licence créée${
-                lic?.id ? `: ${lic.id}` : ""
-              }${lic?.sender ? ` — expéditeur ${lic.sender}` : ""}`
-            );
-            success = true;
-            // reset “léger”
-            setForm((f) => ({ ...f, name: "", siret: "", sender: "", credits: 0 }));
-            break;
-          } else {
-            lastBody =
-              (isJson ? (data as any)?.error : data) || `HTTP ${res.status}`;
-            // essaie endpoint suivant
-          }
-        } catch (err: any) {
-          lastBody = err?.message || String(err);
-          // essaie endpoint suivant
-        }
-      }
-
-      if (!success) {
-        throw new Error(
-          `Échec création licence (dernier essai: ${lastTriedUrl}, status ${lastStatus}) — ${lastBody}`
-        );
-      }
+      await onCreate({
+        ...form,
+        sender: senderPreview,
+        siret: onlyDigits(form.siret || ""),
+        credits: Number(form.credits) || 0,
+      });
+      setMsg("✅ Licence créée.");
+      // reset minimal
+      setForm({
+        name: "",
+        siret: "",
+        sender: "",
+        plan: "basic",
+        credits: 0,
+        contactName: "",
+        contactEmail: "",
+        contactPhone: "",
+      });
     } catch (e: any) {
       setMsg(`❌ ${e?.message || "Erreur lors de la création."}`);
     } finally {
@@ -166,15 +85,106 @@ export default function LicenceCreateForm() {
     }
   }
 
+  function resetForm() {
+    setForm({
+      name: "",
+      siret: "",
+      sender: "",
+      plan: "basic",
+      credits: 0,
+      contactName: "",
+      contactEmail: "",
+      contactPhone: "",
+    });
+    setMsg(null);
+  }
+
+  // Préremplissage depuis un JSON (collé depuis l’onglet Essais)
+  function prefillFromObject(raw: any) {
+    try {
+      const contact = raw.contact || {};
+      const name =
+        raw.name || raw.nom || raw.enseigne || raw.storeName || raw.magasin || "";
+      const siret = onlyDigits(raw.siret || "");
+      const sender =
+        raw.sender || raw.alias || raw.libelleExpediteur || form.sender || "";
+      const email =
+        contact.email || raw.contactEmail || raw.email || "";
+      const phone =
+        contact.phone || raw.contactPhone || raw.telephone || raw.phone || "";
+      const contactName =
+        contact.name || raw.contactName || "";
+      // plan/formule/abonnement
+      const plan =
+        raw.plan
+          ? mapFormuleToPlan(raw.plan)
+          : raw.formule
+          ? mapFormuleToPlan(raw.formule)
+          : raw.abonnement?.formule
+          ? mapFormuleToPlan(raw.abonnement.formule)
+          : "basic";
+      const credits =
+        Number(
+          raw.credits ??
+          raw.creditsInitiaux ??
+          0
+        ) || 0;
+
+      setForm((f) => ({
+        ...f,
+        name,
+        siret,
+        sender,
+        plan,
+        credits,
+        contactName,
+        contactEmail: email,
+        contactPhone: phone,
+      }));
+      setMsg("✨ Champs préremplis depuis le presse-papiers.");
+    } catch {
+      setMsg("❌ Impossible de préremplir (format inattendu).");
+    }
+  }
+
+  async function pasteFromClipboard() {
+    setMsg(null);
+    try {
+      const text = await navigator.clipboard.readText();
+      const obj = JSON.parse(text);
+      prefillFromObject(obj);
+    } catch (e) {
+      // fallback: prompt si readText/JSON échoue
+      const text = window.prompt("Collez ici le JSON copié depuis l’onglet Essais :");
+      if (!text) return;
+      try {
+        const obj = JSON.parse(text);
+        prefillFromObject(obj);
+      } catch {
+        setMsg("❌ JSON invalide.");
+      }
+    }
+  }
+
   return (
-    <form onSubmit={submit} style={{ maxWidth: 560, padding: 16 }}>
+    <form onSubmit={submit} style={{ maxWidth: 520, padding: 16 }}>
       <h2>Créer une licence</h2>
+
+      <div style={{ margin: "8px 0", display: "flex", gap: 8 }}>
+        <button type="button" onClick={pasteFromClipboard}>
+          📋 Coller depuis le presse-papiers
+        </button>
+        <button type="button" onClick={resetForm}>
+          ♻️ Réinitialiser
+        </button>
+      </div>
 
       <label>
         Enseigne*<br />
         <input
           value={form.name}
           onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+          required
         />
       </label>
       <br />
@@ -184,12 +194,11 @@ export default function LicenceCreateForm() {
         <input
           value={form.siret}
           onChange={(e) => setForm((f) => ({ ...f, siret: e.target.value }))}
-          placeholder="14 chiffres (facultatif)"
+          onBlur={() => setForm((f) => ({ ...f, siret: onlyDigits(f.siret) }))}
+          placeholder="14 chiffres"
+          inputMode="numeric"
         />
       </label>
-      {!validSiret && (
-        <div style={{ color: "#b00" }}>Le SIRET doit contenir 14 chiffres.</div>
-      )}
       <br />
 
       <label>
@@ -199,8 +208,12 @@ export default function LicenceCreateForm() {
           onChange={(e) => setForm((f) => ({ ...f, sender: e.target.value }))}
           onBlur={() => setForm((f) => ({ ...f, sender: onlyAZ09(f.sender) }))}
           placeholder="OPTICOM"
+          required
         />
       </label>
+      <div style={{ fontSize: 12, opacity: 0.8 }}>
+        Aperçu expéditeur: <code>{senderPreview || "—"}</code>
+      </div>
       {!validSender && form.sender && (
         <div style={{ color: "#b00" }}>Entre 3 et 11 caractères A-Z / 0-9.</div>
       )}
@@ -211,7 +224,7 @@ export default function LicenceCreateForm() {
         <select
           value={form.plan}
           onChange={(e) =>
-            setForm((f) => ({ ...f, plan: e.target.value as FormState["plan"] }))
+            setForm((f) => ({ ...f, plan: e.target.value as NewLicenceInput["plan"] }))
           }
         >
           <option value="basic">basic</option>
@@ -219,6 +232,9 @@ export default function LicenceCreateForm() {
           <option value="unlimited">unlimited</option>
         </select>
       </label>
+      <div style={{ fontSize: 12, opacity: 0.8 }}>
+        Formule résultante: <code>{mapPlanToFormule(form.plan)}</code>
+      </div>
       <br />
 
       <label>
@@ -226,45 +242,34 @@ export default function LicenceCreateForm() {
         <input
           type="number"
           value={form.credits}
-          onChange={(e) =>
-            setForm((f) => ({ ...f, credits: Number(e.target.value) }))
-          }
-          min={0}
+          onChange={(e) => setForm((f) => ({ ...f, credits: Number(e.target.value) }))}
         />
       </label>
 
       <fieldset style={{ marginTop: 12 }}>
         <legend>Contact</legend>
-
         <label>
           Nom<br />
           <input
-            value={form.contactName}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, contactName: e.target.value }))
-            }
+            value={form.contactName || ""}
+            onChange={(e) => setForm((f) => ({ ...f, contactName: e.target.value }))}
           />
         </label>
         <br />
-
         <label>
           Email<br />
           <input
-            value={form.contactEmail}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, contactEmail: e.target.value }))
-            }
+            value={form.contactEmail || ""}
+            onChange={(e) => setForm((f) => ({ ...f, contactEmail: e.target.value }))}
+            type="email"
           />
         </label>
         <br />
-
         <label>
           Téléphone<br />
           <input
-            value={form.contactPhone}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, contactPhone: e.target.value }))
-            }
+            value={form.contactPhone || ""}
+            onChange={(e) => setForm((f) => ({ ...f, contactPhone: e.target.value }))}
           />
         </label>
       </fieldset>
@@ -273,17 +278,7 @@ export default function LicenceCreateForm() {
         {loading ? "Création…" : "Créer la licence"}
       </button>
 
-      {msg && <p style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>{msg}</p>}
-
-      <div style={{ marginTop: 8, fontSize: 12, opacity: 0.6 }}>
-        API: <code>{API_BASE}</code>
-        {lastTriedUrl ? (
-          <>
-            {" "}
-            • Dernier endpoint: <code>{lastTriedUrl}</code>
-          </>
-        ) : null}
-      </div>
+      {msg && <p style={{ marginTop: 8 }}>{msg}</p>}
     </form>
   );
 }

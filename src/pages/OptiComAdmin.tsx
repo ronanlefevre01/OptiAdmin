@@ -13,7 +13,7 @@ import CreditsTab from "./tabs/CreditsTab";
 import SubscriptionsTab from "./tabs/SubscriptionsTab";
 import SmsUsageTab from "./tabs/SmsUsageTab";
 import InvoicesTab from "./tabs/InvoicesTab";
-import LicenceCreateForm from "../components/LicenceCreateForm";
+import LicenceCreateForm, { NewLicenceInput } from "../components/LicenceCreateForm";
 
 /* ========= Types ========= */
 export interface AchatCredit {
@@ -539,6 +539,38 @@ const OptiComAdmin = () => {
     saveToStorage(updated);
   };
 
+  /* ========= NOUVEAU : création locale d’une licence ========= */
+  const planToFormule = (p: NewLicenceInput["plan"]): Opticien["formule"] =>
+    p === "basic" ? "Starter" : p === "pro" ? "Pro" : "Premium";
+
+  async function handleCreateLicenceLocal(input: NewLicenceInput) {
+    const id =
+      (typeof window !== "undefined" && window.crypto?.randomUUID?.()) ||
+      Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+    const record = {
+      id,
+      licence: id,
+      nom: input.name,
+      enseigne: input.name,
+      siret: input.siret || "",
+      email: input.contactEmail || "",
+      telephone: input.contactPhone || "",
+      libelleExpediteur: input.sender,
+      formule: planToFormule(input.plan),
+      credits: input.credits || 0,
+      dateCreation: new Date().toISOString(),
+
+      cgvAccepted: false,
+      cgvAcceptedVersion: null as any,
+      cgvCurrentVersion: null as any,
+    };
+
+    const newList = [record, ...opticiens];
+    await saveToStorage(newList);
+  }
+  /* =========================================================== */
+
   /* -------- FEEDBACK: load quand l’onglet est actif -------- */
   const effectiveStatus = useMemo(() => (tab === "feedback" ? fbStatus : ""), [tab, fbStatus]);
 
@@ -684,12 +716,11 @@ const OptiComAdmin = () => {
           {showCreate && (
             <div className="mb-6 border rounded p-4">
               <h3 className="font-medium mb-2">Créer une licence</h3>
-              {/* Astuce d’aide pour coller le JSON copié depuis “Essais” */}
               <div className="text-sm mb-2 opacity-70">
                 Astuce : après avoir cliqué “Créer licence” dans l’onglet <b>Essais</b>, les champs sont copiés dans le presse-papier.
                 Collez-les ici si votre formulaire propose un coller rapide.
               </div>
-              <LicenceCreateForm />
+              <LicenceCreateForm onCreate={handleCreateLicenceLocal} />
               <div className="mt-3">
                 <button
                   onClick={handleReloadClick}
