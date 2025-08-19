@@ -1,54 +1,46 @@
 // api/trial-requests.ts
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-function cors(res: VercelResponse, origin: string | undefined) {
+function allowOrigin(req: VercelRequest, res: VercelResponse) {
+  const origin = (req.headers.origin as string) || '';
   const allowed = (process.env.ALLOWED_ORIGINS || '')
     .split(',')
     .map(s => s.trim())
     .filter(Boolean);
-
-  const isAllowed =
-    !allowed.length ||
-    (origin ? allowed.includes(origin) : false);
-
-  res.setHeader('Access-Control-Allow-Origin', isAllowed ? (origin || '*') : 'null');
+  if (allowed.length === 0 || allowed.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', allowed[0] || '*');
+  }
   res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS,GET');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  return isAllowed;
+}
+
+async function readRawBody(req: VercelRequest): Promise<string> {
+  if (typeof (req as any).body === 'string') return (req as any).body;
+  if (req.body && typeof req.body === 'object') return JSON.stringify(req.body);
+  return await new Promise<string>((resolve, reject) => {
+    let data = '';
+    req.on('data', (c) => (data += c));
+    req.on('end', () => resolve(data));
+    req.on('error', reject);
+  });
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const origin = (req.headers.origin as string) || '';
-  const isAllowed = cors(res, origin);
+  allowOrigin(req, res);
+  if (req.method === 'OPTIONS') return res.status(204).end();
 
-  if (req.method === 'OPTIONS') {
-    return res.status(204).end();
-  }
-
-  // ---- DIAGNOSTIC (GET /api/trial-requests?diag=1) ----
-  if (req.method === 'GET' && (req.query.diag || req.query.ping)) {
-    const BIN_ID =
-      process.env.JSONBIN_TRIAL_BIN_ID || process.env.VITE_JSONBIN_TRIAL_BIN_ID || '';
-    const MASTER_KEY =
-      process.env.JSONBIN_MASTER_KEY || process.env.VITE_JSONBIN_MASTER_KEY || '';
-    const BASE =
-      process.env.JSONBIN_BASE || process.env.VITE_JSONBIN_BASE || 'https://api.jsonbin.io/v3';
-
-    return res.json({
+  // Diag simple
+  if (req.method === 'GET' && 'diag' in (req.query || {})) {
+    return res.status(200).json({
       ok: true,
-      note: 'Ce endpoint est juste pour diagnostiquer la présence des variables.',
-      hasBinId: BIN_ID.length > 0,
-      hasMasterKey: MASTER_KEY.length > 0,
-      base: BASE,
-      allowedOriginsRaw: process.env.ALLOWED_ORIGINS || '',
-      isOriginAllowed: isAllowed,
-      seenOrigin: origin || null,
-      envNamesChecked: {
-        BIN_ID: ['JSONBIN_TRIAL_BIN_ID', 'VITE_JSONBIN_TRIAL_BIN_ID'],
-        MASTER_KEY: ['JSONBIN_MASTER_KEY', 'VITE_JSONBIN_MASTER_KEY'],
-        BASE: ['JSONBIN_BASE', 'VITE_JSONBIN_BASE']
-      },
+      env: {
+        HAS_MASTER_KEY: !!(process.env.JSONBIN_MASTER_KEY || process.env.VITE_JSONBIN_MASTER_KEY),
+        HAS_TRIAL_BIN: !!process.env.JSONBIN_TRIAL_BIN_ID,
+        BASE: process.env.JSONBIN_BASE || 'https://api.jsonbin.io/v3'
+      }
     });
   }
 
@@ -56,92 +48,70 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ ok: false, error: 'method_not_allowed' });
   }
 
-  if (!isAllowed) {
-    return res.status(403).json({ ok: false, error: 'origin_not_allowed', origin });
-  }
-
-  // ---- Récup ENV (tolérant aux 2 noms) ----
-  const BIN_ID =
-    process.env.JSONBIN_TRIAL_BIN_ID || process.env.VITE_JSONBIN_TRIAL_BIN_ID || '';
-  const MASTER_KEY =
-    process.env.JSONBIN_MASTER_KEY || process.env.VITE_JSONBIN_MASTER_KEY || '';
-  const BASE =
-    process.env.JSONBIN_BASE || process.env.VITE_JSONBIN_BASE || 'https://api.jsonbin.io/v3';
-
-  if (!BIN_ID || !MASTER_KEY) {
-    return res.status(500).json({
-      ok: false,
-      error: 'env_missing',
-      missing: {
-        binId: !BIN_ID,
-        masterKey: !MASTER_KEY,
-      },
-      hint: 'Vérifie les variables: JSONBIN_TRIAL_BIN_ID, JSONBIN_MASTER_KEY (ou leurs variantes VITE_*)',
-    });
-  }
-
-  // ---- Corps de la requête ----
-  let body: any = {};
+  // ---- Lecture body JSON
+  let payload: any = {};
   try {
-    body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-  } catch {
-    return res.status(400).json({ ok: false, error: 'invalid_json' });
+    const raw = await readRawBody(req);
+    payload = typeof req.body === 'object' && req.body !== null ? req.body : JSON.parse(raw || '{}');
+  } catch (e) {
+    console.error('bad_json', e);
+    return res.status(400).json({ ok: false, error: 'bad_json' });
   }
 
-  const payload = {
-    createdAt: new Date().toISOString(),
-    ...body,
+  const { storeName, siret, phone, email, alias, source } = payload;
+
+  const MASTER = (process.env.JSONBIN_MASTER_KEY || process.env.VITE_JSONBIN_MASTER_KEY || '').trim();
+  const BIN_ID = (process.env.JSONBIN_TRIAL_BIN_ID || '').trim();
+  const BASE = (process.env.JSONBIN_BASE || 'https://api.jsonbin.io/v3').trim();
+  if (!MASTER || !BIN_ID) {
+    console.error('env_missing', { hasKey: !!MASTER, hasBin: !!BIN_ID });
+    return res.status(500).json({ ok: false, error: 'env_missing' });
+  }
+
+  const entry = {
+    id: Math.random().toString(36).slice(2),
+    date: new Date().toISOString(),
+    storeName, siret, phone, email, alias,
+    source: source || 'web',
+    ua: req.headers['user-agent'] || '',
+    ip: (req.headers['x-forwarded-for'] as string) || (req.socket as any)?.remoteAddress || ''
   };
 
-  // ---- Écriture JSONBin ----
   try {
-    const url = `${BASE}/b/${encodeURIComponent(BIN_ID)}`;
-    const r = await fetch(url, {
+    // 1) Récup record actuel
+    let record: any = { requests: [] };
+    try {
+      const r = await fetch(`${BASE}/b/${BIN_ID}/latest`, {
+        headers: { 'X-Master-Key': MASTER, 'X-Bin-Meta': 'false' }
+      });
+      if (r.ok) record = await r.json();
+    } catch (e) {
+      console.warn('JSONBin GET failed (continue en création)', e);
+    }
+
+    // 2) Ajout + PUT
+    const next = Array.isArray(record?.requests)
+      ? { requests: [...record.requests, entry] }
+      : { requests: [entry] };
+
+    const put = await fetch(`${BASE}/b/${BIN_ID}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'X-Master-Key': MASTER_KEY,
-        'X-Bin-Versioning': 'false',
+        'X-Master-Key': MASTER
       },
-      body: JSON.stringify((prev: any) => prev), // ignoré par fetch natif, on reconstruit juste un body
+      body: JSON.stringify(next)
     });
 
-    // On doit d’abord GET le record courant, puis y ajouter la demande, puis PUT
-    const getR = await fetch(`${BASE}/b/${encodeURIComponent(BIN_ID)}/latest`, {
-      headers: { 'X-Master-Key': MASTER_KEY, 'X-Bin-Meta': 'false' },
-    });
-
-    if (!getR.ok) {
-      const t = await getR.text().catch(() => '');
-      console.error('JSONBin GET error', getR.status, t);
-      return res.status(500).json({ ok: false, error: 'jsonbin_get_failed', status: getR.status, text: t });
+    if (!put.ok) {
+      const txt = await put.text();
+      console.error('jsonbin_put_failed', put.status, txt);
+      return res.status(500).json({ ok: false, error: 'jsonbin_put_failed', status: put.status });
     }
 
-    let current = {};
-    try { current = await getR.json(); } catch {}
-
-    const next = Array.isArray((current as any).requests)
-      ? { requests: [...(current as any).requests, payload] }
-      : { requests: [payload] };
-
-    const putR = await fetch(`${BASE}/b/${encodeURIComponent(BIN_ID)}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Master-Key': MASTER_KEY,
-      },
-      body: JSON.stringify(next),
-    });
-
-    const putText = await putR.text();
-    if (!putR.ok) {
-      console.error('JSONBin PUT error', putR.status, putText);
-      return res.status(500).json({ ok: false, error: 'jsonbin_put_failed', status: putR.status, text: putText });
-    }
-
-    return res.json({ ok: true, savedTo: 'jsonbin' });
-  } catch (e: any) {
-    console.error('Handler error', e?.message || e);
-    return res.status(500).json({ ok: false, error: 'server_error', message: e?.message || String(e) });
+    return res.status(200).json({ ok: true, savedTo: 'jsonbin', id: entry.id });
+  } catch (e) {
+    console.error('server_error', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
   }
 }
