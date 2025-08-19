@@ -277,6 +277,12 @@ async function patchFeedback(item: Feedback, patch: Partial<Feedback>) {
 
 /* ====== Trial Requests helpers ====== */
 function normalizeTrial(it: any): TrialRequest {
+  // normaliser les différents alias & statuts
+  const rawStatus = String(it.status || it.statut || "").toLowerCase();
+  let status: TrialStatus = "pending";
+  if (rawStatus === "traite" || rawStatus === "processed") status = "processed";
+  else status = "pending"; // "nouveau", "en_cours", "open" -> pending
+
   return {
     id: String(it.id || it._id || it.key || Math.random().toString(36).slice(2)),
     storeName: it.storeName || it.magasin || it.nomMagasin || "",
@@ -286,74 +292,64 @@ function normalizeTrial(it: any): TrialRequest {
     alias: it.alias || it.emetteur || "",
     source: it.source || "",
     createdAt: it.createdAt || it.date || new Date().toISOString(),
-    status: (it.status || it.statut || "pending") as TrialStatus,
+    status,
   };
 }
 
+
 async function fetchTrialRequests(params: { status?: "" | TrialStatus; limit?: number; q?: string }) {
-  const t = getAdminToken();
-  const q = params.q || "";
-  const status = params.status ?? "";
-  const urls = [
-    `${API_BASE}/trial-requests?status=${encodeURIComponent(status)}&limit=${params.limit ?? 200}&q=${encodeURIComponent(q)}`,
-    `${API_BASE}/api/trial-requests?status=${encodeURIComponent(status)}&limit=${params.limit ?? 200}&q=${encodeURIComponent(q)}`,
-    `${API_BASE}/trial-requests.json`,
-  ];
-  for (const url of urls) {
-    try {
-      const r = await fetch(url, {
-        headers: { Authorization: `Bearer ${t}` },
-        cache: "no-store",
-      });
-      if (!r.ok) continue;
-      const j = await r.json();
-      const raw = Array.isArray(j) ? j : Array.isArray(j.items) ? j.items : [];
-      return raw.map(normalizeTrial) as TrialRequest[];
-    } catch { /* try next */ }
+  const token = getAdminToken();
+  const limit = params.limit ?? 200;
+  // on ne transmet pas le filtre côté API pour le moment (simple) :
+  const url = `/api/trial-requests?list=1&limit=${limit}`;
+
+  const r = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+
+  if (!r.ok) {
+    // retourne liste vide si non autorisé / env manquant
+    return [];
   }
-  return [];
+
+  const j = await r.json();
+  const raw = Array.isArray(j?.items) ? j.items : [];
+  const all = raw.map(normalizeTrial) as TrialRequest[];
+
+  // Filtrage côté client (status + recherche)
+  const want = (params.status || "").toLowerCase();
+  const q = (params.q || "").toLowerCase();
+
+  return all.filter((t) => {
+    const okStatus = want ? t.status === want : true;
+    const hay = `${t.storeName} ${t.siret} ${t.phone} ${t.email} ${t.alias}`.toLowerCase();
+    const okQuery = q ? hay.includes(q) : true;
+    return okStatus && okQuery;
+  });
 }
 
+
 async function updateTrialStatus(id: string, status: TrialStatus) {
-  const t = getAdminToken();
-  const bodies = [
-    { url: `${API_BASE}/trial-requests/update`, method: "POST" as const },
-    { url: `${API_BASE}/api/trial-requests/update`, method: "POST" as const },
-    { url: `${API_BASE}/trial-requests/${encodeURIComponent(id)}`, method: "PATCH" as const },
-  ];
-  const body = JSON.stringify({ id, status });
-  for (const x of bodies) {
-    try {
-      const r = await fetch(x.url, {
-        method: x.method,
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` },
-        body,
-      });
-      if (r.ok) return true;
-    } catch { /* try next */ }
-  }
-  throw new Error("Impossible de mettre à jour le statut");
+  const r = await fetch("/api/trial-requests/update", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken()}` },
+    body: JSON.stringify({ id, status }),
+  });
+  if (!r.ok) throw new Error("MAJ statut impossible");
+  return true;
 }
 
 async function deleteTrial(id: string) {
-  const t = getAdminToken();
-  const tries = [
-    { url: `${API_BASE}/trial-requests/${encodeURIComponent(id)}`, method: "DELETE" as const },
-    { url: `${API_BASE}/trial-requests/delete`, method: "POST" as const, body: JSON.stringify({ id }) },
-    { url: `${API_BASE}/api/trial-requests/delete`, method: "POST" as const, body: JSON.stringify({ id }) },
-  ];
-  for (const x of tries) {
-    try {
-      const r = await fetch(x.url, {
-        method: x.method,
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken()}` },
-        body: x.body,
-      });
-      if (r.ok) return true;
-    } catch { /* try next */ }
-  }
-  throw new Error("Suppression impossible");
+  const r = await fetch("/api/trial-requests/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken()}` },
+    body: JSON.stringify({ id }),
+  });
+  if (!r.ok) throw new Error("Suppression impossible");
+  return true;
 }
+
 
 /* ====== Component ====== */
 const OptiComAdmin = () => {
