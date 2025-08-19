@@ -19,15 +19,14 @@ function onlyDigits(s: string) {
   return String(s || "").replace(/\D/g, "");
 }
 
-// ===== API BASE -> Render (via env), avec fallback =====
 const V = (import.meta as any).env || {};
 const API_BASE = String(
   V.VITE_SERVER_URL ||
     V.VITE_SERVER_BASE ||
     "https://opticom-sms-server.onrender.com"
 ).replace(/\/$/, "");
+const ADMIN_TOKEN_KEY = "ADMIN_FEEDBACK_TOKEN";
 
-// Optionnel : mapper "basic/pro/unlimited" vers ton libellé serveur
 const PLAN_MAP: Record<FormState["plan"], string> = {
   basic: "starter",
   pro: "pro",
@@ -56,26 +55,21 @@ export default function LicenceCreateForm() {
     setLoading(true);
     setMsg(null);
 
-    // Normalisations
     const sender = onlyAZ09(form.sender);
     const siret = onlyDigits(form.siret);
     const credits = Number(form.credits) || 0;
+    const token = localStorage.getItem(ADMIN_TOKEN_KEY) || "";
 
-    // On envoie les champs sous plusieurs noms usuels pour être compatible
     const payload = {
-      // noms d’enseigne
       name: form.name,
       enseigne: form.name,
 
-      // SIRET
       siret,
 
-      // expéditeur
       sender,
       libelleExpediteur: sender,
 
-      // plan / formule
-      plan: PLAN_MAP[form.plan] ?? form.plan,          // ex. "starter" | "pro" | "premium"
+      plan: PLAN_MAP[form.plan] ?? form.plan, // starter|pro|premium
       formule:
         PLAN_MAP[form.plan] === "starter"
           ? "Starter"
@@ -83,11 +77,9 @@ export default function LicenceCreateForm() {
           ? "Pro"
           : "Premium",
 
-      // crédits
       credits,
       creditsInitiaux: credits,
 
-      // contact
       contact: {
         name: form.contactName || undefined,
         email: form.contactEmail || undefined,
@@ -98,25 +90,28 @@ export default function LicenceCreateForm() {
       contactTelephone: form.contactPhone || undefined,
     };
 
-    // Plusieurs endpoints possibles côté Render (garde celui qui marche et vire les autres)
+    // Priorité : POST /api/licences (puis fallbacks)
     const endpoints = [
-      `${API_BASE}/api/admin/licences`,
+      `${API_BASE}/api/licences`,
       `${API_BASE}/admin/licences`,
-      `${API_BASE}/api/licences/create`,
+      `${API_BASE}/api/admin/licences`,
     ];
 
     try {
       let ok = false;
+      let lastUrl = "";
       let lastStatus = 0;
       let lastText = "";
-      let lastUrl = "";
 
       for (const url of endpoints) {
         lastUrl = url;
         try {
+          const headers: Record<string, string> = { "Content-Type": "application/json" };
+          if (token) headers.Authorization = `Bearer ${token}`;
+
           const res = await fetch(url, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers,
             body: JSON.stringify(payload),
             mode: "cors",
           });
@@ -133,13 +128,11 @@ export default function LicenceCreateForm() {
               }`
             );
             ok = true;
-            // Reset minimal
             setForm((f) => ({ ...f, name: "", siret: "", sender: "", credits: 0 }));
             break;
           } else {
             lastText =
-              (isJson ? (data as any)?.error : data) ||
-              `HTTP ${res.status}`;
+              (isJson ? (data as any)?.error : data) || `HTTP ${res.status}`;
           }
         } catch (e: any) {
           lastText = e?.message || String(e);
@@ -182,7 +175,7 @@ export default function LicenceCreateForm() {
       <br />
 
       <label>
-        Expéditeur SMS* (3–11 A-Z/0-9)<br />
+        Expéditeur SMS* (3–11 A-Z / 0-9)<br />
         <input
           value={form.sender}
           onChange={(e) => setForm((f) => ({ ...f, sender: e.target.value }))}
@@ -191,7 +184,7 @@ export default function LicenceCreateForm() {
         />
       </label>
       {!validSender && form.sender && (
-        <div style={{ color: "#b00" }}>Entre 3 et 11 caractères A-Z/0-9.</div>
+        <div style={{ color: "#b00" }}>Entre 3 et 11 caractères A-Z / 0-9.</div>
       )}
       <br />
 
@@ -223,7 +216,6 @@ export default function LicenceCreateForm() {
 
       <fieldset style={{ marginTop: 12 }}>
         <legend>Contact</legend>
-
         <label>
           Nom<br />
           <input
@@ -234,7 +226,6 @@ export default function LicenceCreateForm() {
           />
         </label>
         <br />
-
         <label>
           Email<br />
           <input
@@ -245,7 +236,6 @@ export default function LicenceCreateForm() {
           />
         </label>
         <br />
-
         <label>
           Téléphone<br />
           <input
@@ -263,7 +253,6 @@ export default function LicenceCreateForm() {
 
       {msg && <p style={{ marginTop: 8 }}>{msg}</p>}
 
-      {/* Petite indication utile en debug */}
       <div style={{ marginTop: 8, fontSize: 12, opacity: 0.6 }}>
         API: <code>{API_BASE}</code>
       </div>
