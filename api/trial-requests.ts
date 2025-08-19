@@ -2,7 +2,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const BIN_ID   = process.env.JSONBIN_TRIAL_BIN_ID || '';
-const MASTER   = process.env.VITE_JSONBIN_MASTER_KEY   || '';
+const MASTER   = process.env.JSONBIN_MASTER_KEY   || '';
 
 function cors(res: VercelResponse) {
   // Si formulaire sur le même domaine (opti-admin.vercel.app), "*" marche aussi
