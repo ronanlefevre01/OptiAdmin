@@ -300,24 +300,26 @@ async function fetchTrialRequests(params: { status?: "" | TrialStatus; limit?: n
   const q = params.q || "";
   const status = params.status ?? "";
 
-  // 1) Vercel (ADMIN_BASE), 2) Render (API_BASE)
-  const bases = [ADMIN_BASE, API_BASE].filter(Boolean);
-  const urls: string[] = [];
-  for (const b of bases) {
-    urls.push(
-      `${b}/api/trial-requests?status=${encodeURIComponent(status)}&limit=${params.limit ?? 200}&q=${encodeURIComponent(q)}`
-    );
-    urls.push(
-      `${b}/trial-requests?status=${encodeURIComponent(status)}&limit=${params.limit ?? 200}&q=${encodeURIComponent(q)}`
-    );
-  }
-  // très dernier recours (mock éventuel)
-  urls.push(`/trial-requests.json`);
+  // 1) même origine (Vercel /api/trial-requests)
+  const sameOrigin =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/api/trial-requests?status=${encodeURIComponent(status)}&limit=${params.limit ?? 200}&q=${encodeURIComponent(q)}`
+      : "";
+
+  // 2) domaine Vercel (au cas où l’app est ouverte ailleurs)
+  const vercelAdmin = `https://opti-admin.vercel.app/api/trial-requests?status=${encodeURIComponent(status)}&limit=${params.limit ?? 200}&q=${encodeURIComponent(q)}`;
+
+  // 3) anciens endpoints Render (fallback)
+  const render1 = `${API_BASE}/trial-requests?status=${encodeURIComponent(status)}&limit=${params.limit ?? 200}&q=${encodeURIComponent(q)}`;
+  const render2 = `${API_BASE}/api/trial-requests?status=${encodeURIComponent(status)}&limit=${params.limit ?? 200}&q=${encodeURIComponent(q)}`;
+  const staticJson = `${API_BASE}/trial-requests.json`;
+
+  const urls = [sameOrigin, vercelAdmin, render1, render2, staticJson].filter(Boolean);
 
   for (const url of urls) {
     try {
       const r = await fetch(url, {
-        headers: t ? { Authorization: `Bearer ${t}` } : undefined,
+        headers: { Authorization: `Bearer ${t}` },
         cache: "no-store",
       });
       if (!r.ok) continue;
@@ -330,6 +332,7 @@ async function fetchTrialRequests(params: { status?: "" | TrialStatus; limit?: n
   }
   return [];
 }
+
 
 async function updateTrialStatus(id: string, status: TrialStatus) {
   const t = getAdminToken();
