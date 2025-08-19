@@ -15,6 +15,12 @@ import SmsUsageTab from "./tabs/SmsUsageTab";
 import InvoicesTab from "./tabs/InvoicesTab";
 import LicenceCreateForm from "../components/LicenceCreateForm";
 
+const TRIAL_API_BASE =
+  (import.meta as any).env?.VITE_TRIAL_API_BASE ||
+  (typeof window !== "undefined" ? window.location.origin : "");
+
+
+
 /* ========= Types ========= */
 export interface AchatCredit {
   date: string;
@@ -298,57 +304,50 @@ function normalizeTrial(it: any): TrialRequest {
 
 
 async function fetchTrialRequests(params: { status?: "" | TrialStatus; limit?: number; q?: string }) {
-  const token = getAdminToken();
-  const limit = params.limit ?? 200;
-  // on ne transmet pas le filtre côté API pour le moment (simple) :
-  const url = `/api/trial-requests?list=1&limit=${limit}`;
+  const t = getAdminToken();
+  const q = params.q || "";
+  const status = params.status ?? "";
 
-  const r = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-  });
+  const urls = [
+    `${TRIAL_API_BASE}/api/trial-requests?status=${encodeURIComponent(status)}&limit=${params.limit ?? 200}&q=${encodeURIComponent(q)}`,
+  ];
 
-  if (!r.ok) {
-    // retourne liste vide si non autorisé / env manquant
-    return [];
+  for (const url of urls) {
+    try {
+      const r = await fetch(url, {
+        headers: { Authorization: `Bearer ${t}` },
+        cache: "no-store",
+      });
+      if (!r.ok) continue;
+      const j = await r.json();
+      const raw = Array.isArray(j) ? j : Array.isArray(j.items) ? j.items : j.requests || [];
+      return (raw || []).map(normalizeTrial) as TrialRequest[];
+    } catch {}
   }
-
-  const j = await r.json();
-  const raw = Array.isArray(j?.items) ? j.items : [];
-  const all = raw.map(normalizeTrial) as TrialRequest[];
-
-  // Filtrage côté client (status + recherche)
-  const want = (params.status || "").toLowerCase();
-  const q = (params.q || "").toLowerCase();
-
-  return all.filter((t) => {
-    const okStatus = want ? t.status === want : true;
-    const hay = `${t.storeName} ${t.siret} ${t.phone} ${t.email} ${t.alias}`.toLowerCase();
-    const okQuery = q ? hay.includes(q) : true;
-    return okStatus && okQuery;
-  });
+  return [];
 }
 
-
 async function updateTrialStatus(id: string, status: TrialStatus) {
-  const r = await fetch("/api/trial-requests/update", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken()}` },
+  const t = getAdminToken();
+  const r = await fetch(`${TRIAL_API_BASE}/api/trial-requests`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` },
     body: JSON.stringify({ id, status }),
   });
-  if (!r.ok) throw new Error("MAJ statut impossible");
+  if (!r.ok) throw new Error("Impossible de mettre à jour le statut");
   return true;
 }
 
 async function deleteTrial(id: string) {
-  const r = await fetch("/api/trial-requests/delete", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken()}` },
-    body: JSON.stringify({ id }),
+  const t = getAdminToken();
+  const r = await fetch(`${TRIAL_API_BASE}/api/trial-requests?id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${t}` },
   });
   if (!r.ok) throw new Error("Suppression impossible");
   return true;
 }
+
 
 
 /* ====== Component ====== */
