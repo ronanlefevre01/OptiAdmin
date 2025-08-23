@@ -11,14 +11,20 @@ export default function Login() {
 
   const nav = useNavigate();
   const loc = useLocation() as any;
-  const redirectTo = loc?.state?.from?.pathname || "/";
+
+  // Redirige vers /admin par défaut (et évite de revenir sur /login ou /)
+  const redirectTo: string = (() => {
+    const p = loc?.state?.from?.pathname;
+    if (!p || p === "/" || p === "/login") return "/admin";
+    return p;
+  })();
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
     setLoading(true);
     try {
-      const r = await fetch(api("admin/login"), {
+      const r = await fetch(api("/admin/login"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
