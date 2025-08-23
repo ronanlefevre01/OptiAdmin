@@ -1,39 +1,31 @@
-import { api } from "./api";
+// src/lib/adminAuth.ts
+import { api } from './api';
 
-const TOKEN_KEY = "opticom_admin_jwt";
+const KEY = 'admin_jwt';
 
-export const getAdminToken = () => localStorage.getItem(TOKEN_KEY);
-export const setAdminToken = (t: string) => localStorage.setItem(TOKEN_KEY, t);
-export const clearAdminToken = () => localStorage.removeItem(TOKEN_KEY);
-
-// Vérifie le token auprès du serveur
-export async function ensureAdminAuth(): Promise<boolean> {
-  const t = getAdminToken();
-  if (!t) return false;
-  try {
-    const r = await fetch(api("/api/admin/me"), {
-      headers: { Authorization: `Bearer ${t}` },
-    });
-    const j = await r.json().catch(() => null);
-    return r.ok && j?.ok === true;
-  } catch {
-    return false;
-  }
+export function getAdminToken() {
+  try { return localStorage.getItem(KEY) || ''; } catch { return ''; }
+}
+export function setAdminToken(token: string) {
+  try { localStorage.setItem(KEY, token); } catch {}
+}
+export function clearAdminToken() {
+  try { localStorage.removeItem(KEY); } catch {}
 }
 
-// Wrapper fetch pour les routes /api/admin/secure/*
-export async function adminFetch(path: string, opts: RequestInit = {}) {
-  const t = getAdminToken();
-  const headers = new Headers(opts.headers || {});
-  if (!headers.has("Content-Type") && opts.body) headers.set("Content-Type", "application/json");
-  if (t) headers.set("Authorization", `Bearer ${t}`);
+/** Retourne true si un token existe et que /admin/me répond OK, sinon false (et purge le token). */
+export async function ensureAdminAuth(): Promise<boolean> {
+  const token = getAdminToken();
+  if (!token) return false;
 
-  const res = await fetch(api(path), { ...opts, headers });
-  if (res.status === 401 || res.status === 403) {
+  try {
+    const r = await fetch(api('admin/me'), {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!r.ok) throw new Error(String(r.status));
+    return true;
+  } catch {
     clearAdminToken();
-    // renvoie au login
-    if (typeof window !== "undefined") window.location.href = "/login";
-    throw new Error("UNAUTHORIZED");
+    return false;
   }
-  return res;
 }
