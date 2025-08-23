@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { API_BASE as DEFAULT_API_BASE } from '../lib/api'; // ← ton api.ts
 
 type Opticien = {
   id: string;
@@ -11,20 +12,20 @@ type Opticien = {
 };
 
 interface Props {
-  opticien: Opticien;                 // on s’en sert pour l’ID et un pré-remplissage instantané
+  opticien: Opticien;                 // sert à l’ID + préfill immédiat
   onSave: (updated: Opticien) => void;
   onCancel: () => void;
-  API_BASE?: string;                  // passe-le en prop, sinon modifie DEFAULT_API_BASE ci-dessous
+  API_BASE?: string;                  // optionnel (fallback api.ts)
 }
 
 /* ================= Helpers ================= */
-const DEFAULT_API_BASE = ''; // ← remplace par ton import si tu veux: import API_BASE from '../config/api'
 const SENDER_RX = /^[A-Za-z0-9]{3,11}$/;
+const normalizeSender = (raw: string) =>
+  (raw || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11) || 'OPTICOM';
 
-function normalizeSender(raw: string) {
-  const s = String(raw || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 11);
-  return s.length < 3 ? 'OPTICOM' : s;
-}
+const safeJson = (t: string) => {
+  try { return JSON.parse(t); } catch { return null; }
+};
 
 /* ======= types serveur minimaux ======= */
 type LicenceApi = {
@@ -78,8 +79,8 @@ export default function OpticienDetailsPage({
   const [err, setErr] = useState<string | null>(null);
   const [licence, setLicence] = useState<LicenceApi | null>(null);
 
-  // Préremplissage instantané (avant fetch) avec les infos que tu avais déjà
-  const initialInstant: FormState = useMemo(
+  // Préremplissage instantané (avant fetch serveur)
+  const instant: FormState = useMemo(
     () => ({
       licenceKey: '—',
       formule: optFromList.formule,
@@ -101,79 +102,81 @@ export default function OpticienDetailsPage({
     [optFromList]
   );
 
-  const [form, setForm] = useState<FormState>(initialInstant);
+  const [form, setForm] = useState<FormState>(instant);
 
-  // Fetch complet depuis le serveur (préremplit tout)
+  // Fetch complet (robuste JSON/HTML + id/cle)
   useEffect(() => {
     let alive = true;
     (async () => {
       setLoading(true);
       setErr(null);
-      try {
-        const url = `${API_BASE}/licence?id=${encodeURIComponent(optFromList.id)}`;
-        const r = await fetch(url);
-        const j = await r.json();
-        if (!r.ok || !j?.licence) throw new Error(j?.error || 'Licence introuvable');
+      const id = String(optFromList.id || '').trim();
 
-        const L: LicenceApi = j.licence;
+      const urls = [
+        `${API_BASE}/api/licence?id=${encodeURIComponent(id)}`,
+        `${API_BASE}/api/licence/by-key?cle=${encodeURIComponent(id)}`,
+        `${API_BASE}/licence?id=${encodeURIComponent(id)}`,
+        `${API_BASE}/licence/by-key?cle=${encodeURIComponent(id)}`
+      ];
+
+      try {
+        let L: LicenceApi | null = null;
+        let last = '';
+
+        for (const u of urls) {
+          const r = await fetch(u, { headers: { Accept: 'application/json' } });
+          const txt = await r.text(); last = txt;
+          const j = safeJson(txt);
+          if (r.ok && j?.licence) { L = j.licence as LicenceApi; break; }
+        }
+        if (!L) throw new Error(`Licence introuvable (réponse: ${last.slice(0, 80)}…)`);
+
         if (!alive) return;
+        setLicence(L);
 
         const o = L.opticien || {};
-        setLicence(L);
-        setForm({
+        setForm(f => ({
+          ...f,
           licenceKey: L.licence || '—',
-          formule: (L.abonnement as any) || initialInstant.formule,
-          credits: String(L.credits ?? initialInstant.credits),
+          formule: (L.abonnement as Opticien['formule']) || f.formule,
+          credits: String(L.credits ?? f.credits),
 
-          nom: o.enseigne || o.nom || initialInstant.nom,
-          email: o.email || initialInstant.email,
-          telephone: o.telephone || initialInstant.telephone,
-
+          nom: o.enseigne || o.nom || f.nom,
+          email: o.email || f.email,
+          telephone: o.telephone || f.telephone,
           adresse: o.adresse || '',
           ville: o.ville || '',
           codePostal: o.codePostal || '',
           pays: o.pays || 'FR',
-          siret: o.siret || initialInstant.siret,
+          siret: o.siret || f.siret,
 
-          expediteur: L.libelleExpediteur
-            ? normalizeSender(L.libelleExpediteur)
-            : normalizeSender(o.enseigne || o.nom || initialInstant.nom),
+          expediteur: normalizeSender(L.libelleExpediteur || o.enseigne || o.nom || 'OPTICOM'),
           signature: L.signature || '',
-        });
+        }));
       } catch (e: any) {
         if (alive) setErr(e?.message || 'Erreur de chargement');
       } finally {
         if (alive) setLoading(false);
       }
     })();
-    return () => {
-      alive = false;
-    };
-  }, [API_BASE, optFromList.id]); // charge quand l’ID change
+    return () => { alive = false; };
+  }, [API_BASE, optFromList.id]);
 
-  const handleChange = <K extends keyof FormState>(key: K, value: FormState[K]) => {
-    setForm((f) => ({ ...f, [key]: value }));
-  };
+  const change = <K extends keyof FormState>(k: K, v: FormState[K]) =>
+    setForm(f => ({ ...f, [k]: v }));
 
   async function handleSave() {
-    if (!licence) return;
-    setErr(null);
+    if (!licence?.id) { setErr('Licence introuvable'); return; }
 
-    // validations min
+    // validations minimales
     const exp = normalizeSender(form.expediteur);
-    if (!SENDER_RX.test(exp)) {
-      setErr("Le libellé expéditeur doit être alphanumérique (3–11 caractères).");
-      return;
-    }
+    if (!SENDER_RX.test(exp)) { setErr('Libellé expéditeur invalide (3–11, A–Z/0–9).'); return; }
     const creditsNum = Number(form.credits);
-    if (!Number.isFinite(creditsNum) || creditsNum < 0) {
-      setErr('Crédits invalides.');
-      return;
-    }
+    if (!Number.isFinite(creditsNum) || creditsNum < 0) { setErr('Crédits invalides.'); return; }
 
-    setSaving(true);
+    setSaving(true); setErr(null);
     try {
-      // 1) Patch général (adresse / emails / formule / crédits)
+      // 1) patch général
       const patch = {
         abonnement: form.formule,
         credits: creditsNum,
@@ -196,28 +199,28 @@ export default function OpticienDetailsPage({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ licenceId: licence.id, patch }),
       });
-      const j1 = await r1.json();
+      const j1 = safeJson(await r1.text());
       if (!r1.ok || j1?.ok === false) throw new Error(j1?.error || 'SYNC_FAILED');
 
-      // 2) Expéditeur (champ protégé)
+      // 2) expéditeur
       const r2 = await fetch(`${API_BASE}/api/licence/expediteur`, {
-        method: 'PUT',
+        method: 'POST', // PUT accepté aussi côté serveur
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ licenceId: licence.id, libelleExpediteur: exp }),
       });
-      const j2 = await r2.json();
+      const j2 = safeJson(await r2.text());
       if (!r2.ok || j2?.success === false) throw new Error(j2?.error || 'EXPEDITEUR_FAILED');
 
-      // 3) Signature (champ protégé)
+      // 3) signature
       const r3 = await fetch(`${API_BASE}/api/licence/signature`, {
-        method: 'PUT',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ licenceId: licence.id, signature: form.signature || '' }),
       });
-      const j3 = await r3.json();
+      const j3 = safeJson(await r3.text());
       if (!r3.ok || j3?.success === false) throw new Error(j3?.error || 'SIGNATURE_FAILED');
 
-      // Appelle ton callback existant avec un objet “plat” compatible avec ta liste
+      // callback liste
       onSave({
         id: licence.id,
         nom: form.nom,
@@ -235,100 +238,74 @@ export default function OpticienDetailsPage({
   }
 
   return (
-    <div style={{ padding: 20, maxWidth: 680 }}>
+    <div style={{ padding: 20, maxWidth: 740 }}>
       <h2>📝 Modifier licence</h2>
 
+      {form.licenceKey && (
+        <div style={{ margin: '6px 0', color: '#666' }}>
+          Licence : <code>{form.licenceKey}</code>
+        </div>
+      )}
+
+      {err && <div style={{ color: '#d00', marginBottom: 8 }}>{err}</div>}
       {loading ? (
         <p>Chargement…</p>
       ) : (
         <>
-          {form.licenceKey && (
-            <div style={{ margin: '6px 0', color: '#666' }}>
-              Licence&nbsp;:&nbsp;<code>{form.licenceKey}</code>
-            </div>
-          )}
-
-          <div className="grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <label className="col-span-2">
               Nom / Enseigne :
-              <input
-                value={form.nom}
-                onChange={(e) => handleChange('nom', e.target.value)}
-                className="w-full border p-2 rounded"
-              />
+              <input className="w-full border p-2 rounded"
+                     value={form.nom} onChange={e=>change('nom', e.target.value)} />
             </label>
 
             <label>
               Email :
-              <input
-                value={form.email}
-                onChange={(e) => handleChange('email', e.target.value)}
-                className="w-full border p-2 rounded"
-              />
+              <input className="w-full border p-2 rounded"
+                     value={form.email} onChange={e=>change('email', e.target.value)} />
             </label>
 
             <label>
               Téléphone :
-              <input
-                value={form.telephone}
-                onChange={(e) => handleChange('telephone', e.target.value)}
-                placeholder="06… ou +33…"
-                className="w-full border p-2 rounded"
-              />
+              <input className="w-full border p-2 rounded" placeholder="06… ou +33…"
+                     value={form.telephone} onChange={e=>change('telephone', e.target.value)} />
             </label>
 
             <label className="col-span-2">
               Adresse :
-              <input
-                value={form.adresse}
-                onChange={(e) => handleChange('adresse', e.target.value)}
-                className="w-full border p-2 rounded"
-              />
+              <input className="w-full border p-2 rounded"
+                     value={form.adresse} onChange={e=>change('adresse', e.target.value)} />
             </label>
 
             <label>
               Ville :
-              <input
-                value={form.ville}
-                onChange={(e) => handleChange('ville', e.target.value)}
-                className="w-full border p-2 rounded"
-              />
+              <input className="w-full border p-2 rounded"
+                     value={form.ville} onChange={e=>change('ville', e.target.value)} />
             </label>
 
             <label>
               Code Postal :
-              <input
-                value={form.codePostal}
-                onChange={(e) => handleChange('codePostal', e.target.value)}
-                className="w-full border p-2 rounded"
-              />
+              <input className="w-full border p-2 rounded"
+                     value={form.codePostal} onChange={e=>change('codePostal', e.target.value)} />
             </label>
 
             <label>
               Pays :
-              <input
-                value={form.pays}
-                onChange={(e) => handleChange('pays', e.target.value)}
-                className="w-full border p-2 rounded"
-              />
+              <input className="w-full border p-2 rounded"
+                     value={form.pays} onChange={e=>change('pays', e.target.value)} />
             </label>
 
             <label>
               SIRET :
-              <input
-                value={form.siret}
-                onChange={(e) => handleChange('siret', e.target.value)}
-                className="w-full border p-2 rounded"
-              />
+              <input className="w-full border p-2 rounded"
+                     value={form.siret} onChange={e=>change('siret', e.target.value)} />
             </label>
 
             <label>
               Formule :
-              <select
-                value={form.formule}
-                onChange={(e) => handleChange('formule', e.target.value as Opticien['formule'])}
-                className="w-full border p-2 rounded"
-              >
+              <select className="w-full border p-2 rounded"
+                      value={form.formule}
+                      onChange={e=>change('formule', e.target.value as Opticien['formule'])}>
                 <option value="Starter">Starter</option>
                 <option value="Pro">Pro</option>
                 <option value="Premium">Premium</option>
@@ -339,34 +316,23 @@ export default function OpticienDetailsPage({
 
             <label>
               Crédits :
-              <input
-                type="number"
-                value={form.credits}
-                onChange={(e) => handleChange('credits', e.target.value)}
-                className="w-full border p-2 rounded"
-              />
+              <input type="number" className="w-full border p-2 rounded"
+                     value={form.credits} onChange={e=>change('credits', e.target.value)} />
             </label>
 
             <label>
-              Libellé expéditeur (3–11 car. A-Z/0-9) :
-              <input
-                value={form.expediteur}
-                onChange={(e) => handleChange('expediteur', e.target.value)}
-                className="w-full border p-2 rounded"
-              />
+              Libellé expéditeur (3–11 car. A–Z/0–9) :
+              <input className="w-full border p-2 rounded font-mono"
+                     value={form.expediteur}
+                     onChange={e=>change('expediteur', normalizeSender(e.target.value))} />
             </label>
 
             <label>
               Signature SMS :
-              <input
-                value={form.signature}
-                onChange={(e) => handleChange('signature', e.target.value)}
-                className="w-full border p-2 rounded"
-              />
+              <input className="w-full border p-2 rounded"
+                     value={form.signature} onChange={e=>change('signature', e.target.value)} />
             </label>
           </div>
-
-          {err && <div style={{ color: '#d00', marginTop: 8 }}>{err}</div>}
 
           <div style={{ marginTop: 16 }}>
             <button onClick={saving ? undefined : handleSave} disabled={saving} style={{ marginRight: 8 }}>
