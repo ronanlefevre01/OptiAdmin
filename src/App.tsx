@@ -1,31 +1,47 @@
 // src/App.tsx
-import React, { useState, lazy, Suspense } from 'react';
-import HomePage from './HomePage';
+import React, { lazy, Suspense } from "react";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import HomePage from "./HomePage";
+import RequireAdminAuth from "./routes/RequireAdminAuth"; // <— le garde
+import Login from "./pages/Login";                       // <— la page de connexion
 
-// Lazy load des pages
-const OptiComAdmin = lazy(() => import('./pages/OptiComAdmin'));
-const OptiMesureAdmin = lazy(() => import('./pages/OptiMesureAdmin'));
+// Lazy load des gros écrans
+const OptiComAdmin = lazy(() => import("./pages/OptiComAdmin"));
+const OptiMesureAdmin = lazy(() => import("./pages/OptiMesureAdmin"));
 
-type SelectedApp = 'OptiCOM' | 'OptiMesure' | null;
+// HomePage attend onSelect(app). On utilise le router pour naviguer.
+function HomeRoute() {
+  const navigate = useNavigate();
+  return (
+    <HomePage
+      onSelect={(app: "OptiCOM" | "OptiMesure") =>
+        navigate(app === "OptiCOM" ? "/opticom" : "/optimesure")
+      }
+    />
+  );
+}
 
 export default function App() {
-  const [selectedApp, setSelectedApp] = useState<SelectedApp>(null);
-
-  if (!selectedApp) {
-    return <HomePage onSelect={setSelectedApp} />;
-  }
-
-  const goBack = () => setSelectedApp(null);
-
   return (
-    <Suspense fallback={<div style={{ padding: 16 }}>Chargement…</div>}>
-      <div style={{ padding: 12 }}>
-        <button onClick={goBack} style={{ marginBottom: 12 }}>
-          ← Retour
-        </button>
+    <BrowserRouter>
+      <Suspense fallback={<div style={{ padding: 16 }}>Chargement…</div>}>
 
-        {selectedApp === 'OptiCOM' ? <OptiComAdmin /> : <OptiMesureAdmin />}
-      </div>
-    </Suspense>
+        <Routes>
+          {/* Publique */}
+          <Route path="/login" element={<Login />} />
+
+          {/* Tout le reste est protégé */}
+          <Route element={<RequireAdminAuth />}>
+            <Route index element={<HomeRoute />} />
+            <Route path="/opticom" element={<OptiComAdmin />} />
+            <Route path="/optimesure" element={<OptiMesureAdmin />} />
+          </Route>
+
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+
+      </Suspense>
+    </BrowserRouter>
   );
 }
