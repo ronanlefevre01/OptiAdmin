@@ -2,7 +2,7 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 
-import AdminLoginPage from './pages/AdminLoginPage';
+import AdminLoginPage from './pages/Login';
 import OptiComAdmin from './pages/OptiComAdmin';
 import OptiMesureAdmin from './pages/OptiMesureAdmin';
 
