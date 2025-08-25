@@ -2,8 +2,8 @@
 import React from "react";
 import type { Opticien } from "../OptiComAdmin";
 
-// Chemins lib (attention à la casse des noms de fichiers)
-import { api } from "../../lib/api";
+// ✅ Utilise apiAdmin (préfixe toujours /api)
+import { apiAdmin } from "../../lib/api";
 import { getAdminToken } from "../../lib/adminAuth";
 
 interface LicencesTabProps {
@@ -100,12 +100,12 @@ const LicencesTab: React.FC<LicencesTabProps> = ({
       // Priorité ID ; sinon suppression par clé
       let url = "";
       if (row.id && row.id !== "—") {
-        // NOTE: on vise l’endpoint DELETE /api/admin/secure/licences/:id
-        url = api(`admin/secure/licences/${encodeURIComponent(row.id)}`);
+        // DELETE /api/admin/secure/licences/:id
+        url = apiAdmin(`admin/secure/licences/${encodeURIComponent(row.id)}`);
       } else if (row.licenceKey && row.licenceKey !== "—") {
-        // NOTE: alternative par clé DELETE /api/admin/secure/licences?cle=XXXX
+        // DELETE /api/admin/secure/licences?cle=XXXX
         const q = new URLSearchParams({ cle: String(row.licenceKey) }).toString();
-        url = api(`admin/secure/licences?${q}`);
+        url = apiAdmin(`admin/secure/licences?${q}`);
       } else {
         alert("Impossible de déterminer l’identifiant ou la clé de la licence.");
         return;
@@ -116,14 +116,9 @@ const LicencesTab: React.FC<LicencesTabProps> = ({
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      // Essaye d’interpréter la réponse (JSON ou texte)
       const text = await resp.text();
       let j: any = {};
-      try {
-        j = text ? JSON.parse(text) : {};
-      } catch {
-        /* noop: texte brut */
-      }
+      try { j = text ? JSON.parse(text) : {}; } catch { /* texte brut */ }
 
       if (resp.status === 401) throw new Error("UNAUTHORIZED");
       if (resp.status === 404) throw new Error("LICENCE_NOT_FOUND");
@@ -131,8 +126,7 @@ const LicencesTab: React.FC<LicencesTabProps> = ({
         throw new Error(j?.error || `HTTP ${resp.status} ${text || ""}`.trim());
       }
 
-      // Succès : on retire localement
-      onDelete(index);
+      onDelete(index); // succès : retire localement
     } catch (e: any) {
       const msg = String(e?.message || e);
       if (msg === "UNAUTHORIZED") {
@@ -152,10 +146,7 @@ const LicencesTab: React.FC<LicencesTabProps> = ({
         const hasId = !!row.id;
 
         return (
-          <div
-            key={row.id || row.licenceKey || index}
-            className="border rounded-md p-4 shadow-sm"
-          >
+          <div key={row.id || row.licenceKey || index} className="border rounded-md p-4 shadow-sm">
             <div className="flex flex-col gap-1">
               <div className="text-lg font-semibold">{row.enseigne}</div>
 
@@ -185,17 +176,10 @@ const LicencesTab: React.FC<LicencesTabProps> = ({
                 {row.cgvAccepted ? (
                   <>
                     ✅ {row.cgvVersion || "acceptées"}
-                    {row.cgvCurrentVersion &&
-                    row.cgvVersion &&
-                    row.cgvCurrentVersion !== row.cgvVersion ? (
-                      <span className="text-amber-600">
-                        {" "}
-                        — à mettre à jour vers {row.cgvCurrentVersion}
-                      </span>
+                    {row.cgvCurrentVersion && row.cgvVersion && row.cgvCurrentVersion !== row.cgvVersion ? (
+                      <span className="text-amber-600"> — à mettre à jour vers {row.cgvCurrentVersion}</span>
                     ) : null}
-                    {row.cgvAt ? (
-                      <span className="text-gray-600"> — {row.cgvAt}</span>
-                    ) : null}
+                    {row.cgvAt ? <span className="text-gray-600"> — {row.cgvAt}</span> : null}
                   </>
                 ) : (
                   <span className="text-red-600">❌ Non accepté</span>
@@ -231,25 +215,15 @@ const LicencesTab: React.FC<LicencesTabProps> = ({
                 <span className="text-sm">Changer la formule</span>
                 <select
                   className="border rounded px-2 py-1"
-                  value={
-                    FORMULES.includes(row.formule as any)
-                      ? (row.formule as any)
-                      : "Starter"
-                  }
+                  value={FORMULES.includes(row.formule as any) ? (row.formule as any) : "Starter"}
                   onChange={(e) =>
-                    hasId &&
-                    onChangeFormule?.(
-                      row.id,
-                      e.target.value as Opticien["formule"]
-                    )
+                    hasId && onChangeFormule?.(row.id, e.target.value as Opticien["formule"])
                   }
                   disabled={!hasId}
                   title={!hasId ? "Identifiant manquant" : ""}
                 >
                   {FORMULES.map((f) => (
-                    <option key={f} value={f}>
-                      {f}
-                    </option>
+                    <option key={f} value={f}>{f}</option>
                   ))}
                 </select>
               </div>
