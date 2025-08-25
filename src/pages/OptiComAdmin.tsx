@@ -479,18 +479,18 @@ const OptiComAdmin = () => {
     setEditing(null);
   };
   const handleCancel = () => setEditing(null);
-  // Appelé APRES succès du DELETE côté LicencesTab
-const handleDelete = (index: number) => {
-  // Retire localement sans re-confirmer, et sans repusher dans JSONBin
-  const newList = opticiens.filter((_, i) => i !== index);
-  setOpticiens(newList);
-  localStorage.setItem("opticom", JSON.stringify(newList));
+// Appelé APRES succès du DELETE côté LicencesTab
+const handleDelete = async (index: number) => {
+  // Retrait optimiste en mémoire + localStorage uniquement
+  setOpticiens((prev) => {
+    const next = prev.filter((_, i) => i !== index);
+    localStorage.setItem("opticom", JSON.stringify(next));
+    return next;
+  });
 
-  // Optionnel : on rafraîchit depuis la source distante pour rester 100% à jour
-  // (la route serveur a déjà modifié JSONBin)
-  reloadFromRemote();
+  // Resynchronise depuis la source distante (serveur/JSONBin)
+  await reloadFromRemote();
 };
-
 
   const handleAddAchat = (opticienId: string, achat: AchatCredit) => {
     const updated = opticiens.map((opt: any) => {
