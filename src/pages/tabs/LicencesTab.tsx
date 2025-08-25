@@ -1,10 +1,13 @@
+// LicencesTab.tsx
 import React from "react";
 import type { Opticien } from "../OptiComAdmin";
+import { api } from "../../lib/api";
+import { getAdminToken } from "../../lib/adminAuth";
 
 interface LicencesTabProps {
   opticiens: any[];
   onEdit: (index: number) => void;
-  onDelete: (index: number) => void;
+  onDelete: (index: number) => void; // sert à enlever localement après succès API
   onChangeFormule?: (opticienId: string, formule: Opticien["formule"]) => void;
   onChangeCredits?: (opticienId: string, delta: number) => void;
 }
@@ -94,6 +97,49 @@ const LicencesTab: React.FC<LicencesTabProps> = ({
     return <p>Aucune licence enregistrée.</p>;
   }
 
+  async function handleDelete(row: ReturnType<typeof normalizeRow>, index: number) {
+    const sure = window.confirm(
+      `Supprimer définitivement la licence « ${row.enseigne} » ?\n\n` +
+      `Cela la retire aussi de JSONBin et déconnectera l'app liée.`
+    );
+    if (!sure) return;
+
+    const token = getAdminToken();
+    if (!token) {
+      alert("Session admin expirée. Merci de vous reconnecter.");
+      return;
+    }
+
+    try {
+      // On privilégie la suppression par ID. Si pas d’ID, on tente par clé (?cle=...)
+      let url: string;
+      let method = "DELETE";
+      if (row.id && row.id !== "—") {
+        url = api(`admin/secure/licences/${encodeURIComponent(row.id)}`);
+      } else if (row.licenceKey && row.licenceKey !== "—") {
+        const q = new URLSearchParams({ cle: String(row.licenceKey) }).toString();
+        url = api(`admin/secure/licences?${q}`);
+      } else {
+        alert("Impossible de déterminer l’identifiant ou la clé de la licence.");
+        return;
+      }
+
+      const resp = await fetch(url, {
+        method,
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const j = await resp.json().catch(() => ({}));
+      if (!resp.ok || j?.ok === false) {
+        throw new Error(j?.error || `HTTP ${resp.status}`);
+      }
+
+      // Succès : on laisse le parent retirer la ligne localement
+      onDelete(index);
+    } catch (e: any) {
+      alert(`Échec de la suppression: ${e?.message || e}`);
+    }
+  }
+
   return (
     <div className="space-y-4">
       {opticiens.map((opt, index) => {
@@ -154,8 +200,9 @@ const LicencesTab: React.FC<LicencesTabProps> = ({
                 ✏️ Modifier
               </button>
               <button
-                onClick={() => onDelete(index)}
+                onClick={() => handleDelete(row, index)}
                 className="text-red-600 hover:underline"
+                title="Supprimer définitivement (JSONBin)"
               >
                 🗑️ Supprimer
               </button>
