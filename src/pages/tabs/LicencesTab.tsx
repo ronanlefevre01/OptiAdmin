@@ -2,7 +2,7 @@
 import React from "react";
 import type { Opticien } from "../OptiComAdmin";
 
-// ✅ Utilise apiAdmin (préfixe toujours /api)
+// ✅ utilise apiAdmin (force le préfixe /api)
 import { apiAdmin } from "../../lib/api";
 import { getAdminToken } from "../../lib/adminAuth";
 
@@ -120,6 +120,11 @@ const LicencesTab: React.FC<LicencesTabProps> = ({
       let j: any = {};
       try { j = text ? JSON.parse(text) : {}; } catch { /* texte brut */ }
 
+      if (!resp.ok) {
+        // Log dev utile pour diagnostiquer un 500
+        console.error("[LicencesTab] DELETE failed", { url, status: resp.status, body: text || j });
+      }
+
       if (resp.status === 401) throw new Error("UNAUTHORIZED");
       if (resp.status === 404) throw new Error("LICENCE_NOT_FOUND");
       if (!resp.ok || j?.ok === false) {
@@ -133,6 +138,7 @@ const LicencesTab: React.FC<LicencesTabProps> = ({
         alert("Non autorisé. Veuillez vous reconnecter à OptiAdmin.");
       } else if (msg === "LICENCE_NOT_FOUND") {
         alert("Licence introuvable (déjà supprimée ?). La liste locale va être rafraîchie.");
+        onDelete(index);
       } else {
         alert(`Échec de la suppression: ${msg}`);
       }
