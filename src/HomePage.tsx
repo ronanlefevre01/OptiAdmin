@@ -1,17 +1,33 @@
 import React from 'react';
 
-const HomePage = ({ onSelect }: { onSelect: (app: 'OptiCOM' | 'OptiMesure') => void }) => {
+type AppKey = 'OptiCOM' | 'OptiMesure' | 'OptiRH';
+
+const HomePage = ({ onSelect }: { onSelect: (app: AppKey) => void }) => {
   return (
     <div style={styles.container}>
       <h1 style={styles.title}>Bienvenue dans OptiAdmin</h1>
       <p style={styles.subtitle}>Choisissez l’application à gérer :</p>
 
       <div style={styles.buttonContainer}>
-        <button style={styles.button} onClick={() => onSelect('OptiCOM')}>
+        <button
+          style={{ ...styles.button, background: '#0d6efd' }}
+          onClick={() => onSelect('OptiCOM')}
+        >
           🟦 Gérer OptiCOM
         </button>
-        <button style={styles.button} onClick={() => onSelect('OptiMesure')}>
+
+        <button
+          style={{ ...styles.button, background: '#198754' }}
+          onClick={() => onSelect('OptiMesure')}
+        >
           🟩 Gérer OptiMesure
+        </button>
+
+        <button
+          style={{ ...styles.button, background: '#6f42c1' }}
+          onClick={() => onSelect('OptiRH')}
+        >
+          🟪 Gérer OptiRH
         </button>
       </div>
     </div>
@@ -36,18 +52,18 @@ const styles: Record<string, React.CSSProperties> = {
   buttonContainer: {
     display: 'flex',
     justifyContent: 'center',
-    gap: '40px',
+    gap: '24px',
+    flexWrap: 'wrap',
   },
   button: {
     fontSize: '18px',
-    padding: '20px 40px',
-    borderRadius: '10px',
+    padding: '16px 28px',
+    borderRadius: '12px',
     cursor: 'pointer',
     border: 'none',
     color: '#fff',
-    background: '#007bff',
-    boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-    transition: 'background 0.3s',
+    boxShadow: '0 4px 10px rgba(0,0,0,0.15)',
+    transition: 'transform 0.08s ease-out',
   },
 };
 
