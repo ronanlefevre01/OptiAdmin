@@ -2,7 +2,7 @@
 import React from "react";
 import type { Opticien } from "../OptiComAdmin";
 
-// ⚠️ adapte ces chemins si besoin selon l’emplacement du fichier
+// Chemins lib (attention à la casse des noms de fichiers)
 import { api } from "../../lib/api";
 import { getAdminToken } from "../../lib/adminAuth";
 
@@ -24,10 +24,10 @@ function normalizeRow(raw: any) {
     (o?.id && String(o.id)) ||
     "";
 
-  const enseigne   = o?.enseigne || raw?.nom || o?.nom || "—";
-  const email      = raw?.email || o?.email || "—";
-  const telephone  = raw?.telephone || o?.telephone || "—";
-  const siret      = raw?.siret || o?.siret || "—";
+  const enseigne = o?.enseigne || raw?.nom || o?.nom || "—";
+  const email = raw?.email || o?.email || "—";
+  const telephone = raw?.telephone || o?.telephone || "—";
+  const siret = raw?.siret || o?.siret || "—";
 
   const formule =
     raw?.formule ||
@@ -35,9 +35,9 @@ function normalizeRow(raw: any) {
     raw?.abonnement ||
     "—";
 
-  const credits    = typeof raw?.credits === "number" ? raw.credits : 0;
+  const credits = typeof raw?.credits === "number" ? raw.credits : 0;
   const licenceKey = raw?.licence || "—";
-  const sender     = raw?.libelleExpediteur || "—";
+  const sender = raw?.libelleExpediteur || "—";
 
   const created = raw?.dateCreation
     ? new Date(raw.dateCreation).toLocaleDateString("fr-FR")
@@ -46,9 +46,11 @@ function normalizeRow(raw: any) {
   const cgvAccepted =
     typeof raw?.cgvAccepted === "boolean" ? raw.cgvAccepted : !!raw?.cgv?.accepted;
 
-  const cgvVersion        = raw?.cgvAcceptedVersion ?? raw?.cgv?.acceptedVersion ?? null;
+  const cgvVersion = raw?.cgvAcceptedVersion ?? raw?.cgv?.acceptedVersion ?? null;
   const cgvCurrentVersion = raw?.cgvCurrentVersion ?? raw?.cgv?.currentVersion ?? null;
-  const cgvAt             = raw?.cgv?.acceptedAt ? new Date(raw.cgv.acceptedAt).toLocaleString("fr-FR") : null;
+  const cgvAt = raw?.cgv?.acceptedAt
+    ? new Date(raw.cgv.acceptedAt).toLocaleString("fr-FR")
+    : null;
 
   return {
     id,
@@ -84,7 +86,7 @@ const LicencesTab: React.FC<LicencesTabProps> = ({
   async function handleDelete(row: ReturnType<typeof normalizeRow>, index: number) {
     const sure = window.confirm(
       `Supprimer définitivement la licence « ${row.enseigne} » ?\n\n` +
-      `Cela la retire aussi de JSONBin et déconnectera l’app liée.`
+        `Cela la retire aussi de JSONBin et déconnectera l’app liée.`
     );
     if (!sure) return;
 
@@ -98,8 +100,10 @@ const LicencesTab: React.FC<LicencesTabProps> = ({
       // Priorité ID ; sinon suppression par clé
       let url = "";
       if (row.id && row.id !== "—") {
+        // NOTE: on vise l’endpoint DELETE /api/admin/secure/licences/:id
         url = api(`/api/admin/secure/licences/${encodeURIComponent(row.id)}`);
       } else if (row.licenceKey && row.licenceKey !== "—") {
+        // NOTE: alternative par clé DELETE /api/admin/secure/licences?cle=XXXX
         const q = new URLSearchParams({ cle: String(row.licenceKey) }).toString();
         url = api(`/api/admin/secure/licences?${q}`);
       } else {
@@ -112,17 +116,23 @@ const LicencesTab: React.FC<LicencesTabProps> = ({
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      // Essaye de décoder la réponse JSON, même en cas d’erreur
+      // Essaye d’interpréter la réponse (JSON ou texte)
+      const text = await resp.text();
       let j: any = {};
-      try { j = await resp.json(); } catch { /* noop */ }
+      try {
+        j = text ? JSON.parse(text) : {};
+      } catch {
+        /* noop: texte brut */
+      }
 
       if (resp.status === 401) throw new Error("UNAUTHORIZED");
       if (resp.status === 404) throw new Error("LICENCE_NOT_FOUND");
       if (!resp.ok || j?.ok === false) {
-        throw new Error(j?.error || `HTTP ${resp.status}`);
+        throw new Error(j?.error || `HTTP ${resp.status} ${text || ""}`.trim());
       }
 
-      onDelete(index); // succès : retire localement
+      // Succès : on retire localement
+      onDelete(index);
     } catch (e: any) {
       const msg = String(e?.message || e);
       if (msg === "UNAUTHORIZED") {
@@ -142,7 +152,10 @@ const LicencesTab: React.FC<LicencesTabProps> = ({
         const hasId = !!row.id;
 
         return (
-          <div key={row.id || row.licenceKey || index} className="border rounded-md p-4 shadow-sm">
+          <div
+            key={row.id || row.licenceKey || index}
+            className="border rounded-md p-4 shadow-sm"
+          >
             <div className="flex flex-col gap-1">
               <div className="text-lg font-semibold">{row.enseigne}</div>
 
@@ -172,10 +185,17 @@ const LicencesTab: React.FC<LicencesTabProps> = ({
                 {row.cgvAccepted ? (
                   <>
                     ✅ {row.cgvVersion || "acceptées"}
-                    {row.cgvCurrentVersion && row.cgvVersion && row.cgvCurrentVersion !== row.cgvVersion ? (
-                      <span className="text-amber-600"> — à mettre à jour vers {row.cgvCurrentVersion}</span>
+                    {row.cgvCurrentVersion &&
+                    row.cgvVersion &&
+                    row.cgvCurrentVersion !== row.cgvVersion ? (
+                      <span className="text-amber-600">
+                        {" "}
+                        — à mettre à jour vers {row.cgvCurrentVersion}
+                      </span>
                     ) : null}
-                    {row.cgvAt ? <span className="text-gray-600"> — {row.cgvAt}</span> : null}
+                    {row.cgvAt ? (
+                      <span className="text-gray-600"> — {row.cgvAt}</span>
+                    ) : null}
                   </>
                 ) : (
                   <span className="text-red-600">❌ Non accepté</span>
@@ -211,13 +231,25 @@ const LicencesTab: React.FC<LicencesTabProps> = ({
                 <span className="text-sm">Changer la formule</span>
                 <select
                   className="border rounded px-2 py-1"
-                  value={FORMULES.includes(row.formule as any) ? (row.formule as any) : "Starter"}
-                  onChange={(e) => hasId && onChangeFormule?.(row.id, e.target.value as Opticien["formule"])}
+                  value={
+                    FORMULES.includes(row.formule as any)
+                      ? (row.formule as any)
+                      : "Starter"
+                  }
+                  onChange={(e) =>
+                    hasId &&
+                    onChangeFormule?.(
+                      row.id,
+                      e.target.value as Opticien["formule"]
+                    )
+                  }
                   disabled={!hasId}
                   title={!hasId ? "Identifiant manquant" : ""}
                 >
                   {FORMULES.map((f) => (
-                    <option key={f} value={f}>{f}</option>
+                    <option key={f} value={f}>
+                      {f}
+                    </option>
                   ))}
                 </select>
               </div>
