@@ -101,11 +101,11 @@ const LicencesTab: React.FC<LicencesTabProps> = ({
       let url = "";
       if (row.id && row.id !== "—") {
         // NOTE: on vise l’endpoint DELETE /api/admin/secure/licences/:id
-        url = api(`/api/admin/secure/licences/${encodeURIComponent(row.id)}`);
+        url = api(`admin/secure/licences/${encodeURIComponent(row.id)}`);
       } else if (row.licenceKey && row.licenceKey !== "—") {
         // NOTE: alternative par clé DELETE /api/admin/secure/licences?cle=XXXX
         const q = new URLSearchParams({ cle: String(row.licenceKey) }).toString();
-        url = api(`/api/admin/secure/licences?${q}`);
+        url = api(`admin/secure/licences?${q}`);
       } else {
         alert("Impossible de déterminer l’identifiant ou la clé de la licence.");
         return;
