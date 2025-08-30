@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Politique de confidentialité — OptiRH (RGPD)</title>
+  <meta name="robots" content="noindex">
+  <style>
+    :root { --max: 900px; }
+    body { margin:0; font:16px/1.6 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:#111; background:#fff; }
+    main { max-width:var(--max); margin:0 auto; padding:32px 16px 80px; }
+    table { border-collapse:collapse; width:100%; }
+    th, td { border:1px solid #e5e5e5; padding:8px 10px; vertical-align:top; }
+    th { background:#fafafa; text-align:left; }
+    pre { background:#f6f8fa; border:1px solid #eee; border-radius:6px; padding:12px; overflow:auto; }
+    code { background:#f6f8fa; border:1px solid #eee; border-radius:4px; padding:2px 4px; }
+    a { color:#0a7; text-decoration:none; }
+    a:hover { text-decoration:underline; }
+  </style>
+</head>
+<body>
+  <main id="app"></main>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script>
+    const md = `# Politique de confidentialité — OptiRH (RGPD)
+**Version :** [1.0]  
+**Date d’entrée en vigueur :** [30/08/2025]
+
+
+---
+
+## 1 Qui sommes‑nous ? Rôles RGPD
+- **Responsable de traitement (RT)** pour les **comptes administrateur**, la **facturation**, le **support**, et la **mesure d’audience** éventuelle : **OVE DISTRIBUTION**, sise **3 rue du Docteur LANDES 08190 ASFELD** (« l’Éditeur », « nous »).  
+- **Sous‑traitant (ST)** pour les **données RH** saisies par le Client (salariés, congés/absences, agenda, annonces, profils, bonus) : **OVE DISTRIBUTION** agit **pour le compte du Client**, qui demeure **RT** pour ces données.
+
+**Contact** : **contact@ovedistribution@gmail.com** — **DPO/Contact RGPD :** **contact@ovedistribution.com**.
+
+---
+
+## 2 Données que nous traitons
+- **Identité & contact** : nom, prénom, e‑mail, rôle, téléphone (optionnel).  
+- **Données RH** : demandes de congés/absences (dates, motif facultatif, statut, décideur), événements d’agenda, annonces (messages/PDF), profils employés, module bonus (formules, entrées, historiques).  
+- **Comptes & sécurité** : identifiants, mots de passe **hachés** (ex. bcrypt/scrypt), jetons d’authentification (JWT), rôles, journaux techniques.  
+- **Appareils** : jetons **push** (Expo), plateforme (iOS/Android), horodatages.  
+- **Facturation (RT Éditeur)** : coordonnées de facturation et historique le cas échéant.
+
+---
+
+## 3 Finalités & bases légales
+- **Exécution du contrat** *(art. 6‑1‑b)* : fournir OptiRH, gérer l’accès et les rôles, traiter les congés, synchroniser l’agenda, publier des annonces, assurer le support et la réversibilité.  
+- **Intérêt légitime** *(art. 6‑1‑f)* : sécurité, prévention des abus/fraudes, amélioration continue, mesure d’audience **agrégée et minimale** (si mise en œuvre).  
+- **Obligations légales** : conservation comptable/fiscale, réponse aux demandes d’autorités.  
+- **Consentement** *(si requis)* : notifications push **non strictement nécessaires** et communications marketing. Le consentement peut être retiré à tout moment dans l’appareil et/ou via les liens fournis.
+
+> **Notifications de service** (ex. « Congé approuvé », « Nouvelle annonce ») sont traitées à **intérêt légitime** car nécessaires au bon fonctionnement. Le contenu envoyé est **minimal** et ne comporte pas d’informations sensibles.
+
+---
+
+## 4 Destinataires & sous‑traitants
+Nous limitons l’accès aux **personnes habilitées** côté Éditeur et aux **utilisateurs autorisés** du Client. Nous recourons aux sous‑traitants suivants pour fournir OptiRH ; nous restons responsables à leur égard (art. 28 RGPD).
+
+> En cas d’**ajout ou remplacement significatif** d’un sous‑traitant, nous informerons le Client **30 jours** avant la mise en production. Le Client peut s’y **opposer pour motif légitime** dans ce délai ; à défaut, le sous‑traitant est réputé accepté.
+
+| Sous‑traitant | Finalité | Catégories de données | Lieu principal de traitement* | Garanties & DPA |
+|---|---|---|---|---|
+| **JSON storage provider (ex. JSONBin)** | Base de données applicative (tenants, utilisateurs, congés, agenda, annonces, profils, bonus, réglages) | Identité (nom, prénom, e‑mail), rôles, **hash** de mot de passe, demandes de congés (dates/motif/statut), événements, métadonnées d’annonces, profils, **tokens push**, réglages | **UE/US** (selon DC) | DPA du prestataire + **SCC** (Clauses Contractuelles Types). Lien : **jsonbin.app@gmail.com** |
+| **Google Drive (Google Ireland / Google LLC)** | Stockage & diffusion des **PDF d’annonces** | Nom/ID de fichier, métadonnées, **fichier PDF** (contenu du Client) | Global (Google) | DPA Google + **SCC** — https://workspace.google.com/terms/dpa_terms.html |
+| **Expo (Exponent, Inc.)** | Envoi de **notifications push** | Jeton **push** d’appareil, titre/texte courts de notification | US/Global | Politique & DPA Expo + **SCC** — https://expo.dev/privacy |
+| **Vercel** | Hébergement **OptiAdmin** (site d’administration) | **Logs** techniques (IP, user‑agent, horodatages) — pas de données RH stockées par défaut | EU/US (CDN global) | DPA Vercel + **SCC** — https://vercel.com/legal/dpa |
+
+\\* *Infrastructure cloud globale possible ; voir § 5 pour les transferts hors UE/EEE.*
+
+> **Attention – Annonces PDF publiques :** quand l’option de lien **public** est activée (Drive), toute personne disposant du lien peut lire le document. Le Client s’engage à **ne pas publier d’informations sensibles** via ce canal, ou à désactiver le lien public.
+
+---
+
+## 5 Transferts hors UE/EEE
+Lorsque des traitements ont lieu hors UE/EEE ou sur des infrastructures globales, nous les **encadrons** conformément aux art. 44 et suivants du RGPD, notamment via les **Clauses Contractuelles Types (SCC)** de la Commission européenne, complétées au besoin par des **mesures supplémentaires** (chiffrement en transit/au repos, minimisation, contrôles d’accès). Détail et exemplaires disponibles sur demande à **contact@ovedistribution.com**.
+
+---
+
+## 6 Durées de conservation
+Sauf obligation légale différente ou litige en cours :
+- **Journaux de sécurité** : **12 mois** ; **tokens push inactifs** : **24 mois**.  
+- **Données RH** (congés/agenda/annonces) : pendant la relation contractuelle **+ 5 ans** *(preuve des décisions/validation)*.  
+- **Profils employés** : pendant l’abonnement **+ 2 ans**.  
+- **Facturation** : **10 ans** (obligation légale).  
+- **Fichiers d’annonces (Drive)** : pendant l’affichage voulu par le Client **+ 2 ans**, sauf suppression anticipée par le Client.
+
+Le Client peut solliciter des **exports** et **effacements** conformément au contrat et au RGPD (cf. réversibilité).
+
+---
+
+## 7 Sécurité
+Mesures techniques et organisationnelles proportionnées : **TLS** en transit, **hachage** des mots de passe (ex. bcrypt/scrypt), séparation **par tenant**, contrôle d’accès **par rôles** (OWNER/EMPLOYEE), sauvegardes et journalisation, principe de **moindre privilège**. Le Client gère les **habilitations** de ses utilisateurs et la **confidentialité** des identifiants.
+
+---
+
+## 8 Droits des personnes
+Conformément au RGPD/législation française, toute personne dispose des droits d’**accès**, **rectification**, **effacement**, **limitation**, **opposition**, **portabilité**, et de définir des **directives post‑mortem**.  
+- Pour les traitements où nous agissons en **Sous‑traitant** (données RH), les demandes doivent être adressées au **Client (RT)** ; nous **l’assistons** pour y répondre.  
+- Pour les traitements dont nous sommes **RT** (comptes admin, facturation, support, logs), contactez : **[DPO/Contact RGPD] – [Email de contact]**.  
+Vous pouvez également saisir la **CNIL** (https://www.cnil.fr).
+
+---
+
+## 9 Cookies & traceurs (OptiAdmin)
+La web‑app d’administration peut recourir à des traceurs **strictement nécessaires** (authentification, préférences). Toute mesure d’audience **non exemptée** est soumise à votre **consentement**. Aucun traçage publicitaire n’est opéré.
+
+---
+
+## 10 Spécifique « Annonces PDF » (Drive public)
+Lorsque le Client active l’option **lien public**, l’URL peut être consultée par quiconque la détient. Le Client reste **seul responsable** du **contenu** publié et s’engage à **ne pas y inclure d’informations sensibles**. L’option peut être désactivée à tout moment pour restreindre l’accès (liens privés).
+
+---
+
+## 11 Modifications de la présente politique
+Nous pouvons mettre à jour la présente politique pour refléter des évolutions légales, techniques ou fonctionnelles. La **date de dernière mise à jour** figure en tête. En cas de changement substantiel, le Client est **informé** par tout moyen utile.
+
+---
+
+## 12 Contact
+**Éditeur :** OVE DISTRIBUTION — **Adresse :** 3 rue du Docteur LANDES 08190 ASFELD — **E‑mail :** contact@ovedistribution.com  
+**DPO/Contact RGPD :** OVE DISTRIBUTION — **E‑mail :** contact@ovedistribution.com  
+**Juridiction compétente :** SEDAN 08, droit français.
+`;
+    document.getElementById('app').innerHTML = marked.parse(md);
+  </script>
+</body>
+</html>

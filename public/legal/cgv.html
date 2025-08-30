@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Conditions Générales de Vente (CGV) — OptiRH</title>
+  <meta name="robots" content="noindex">
+  <style>
+    :root { --max: 900px; }
+    body { margin:0; font:16px/1.6 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:#111; background:#fff; }
+    main { max-width:var(--max); margin:0 auto; padding:32px 16px 80px; }
+    table { border-collapse:collapse; width:100%; }
+    th, td { border:1px solid #e5e5e5; padding:8px 10px; vertical-align:top; }
+    th { background:#fafafa; text-align:left; }
+    pre { background:#f6f8fa; border:1px solid #eee; border-radius:6px; padding:12px; overflow:auto; }
+    code { background:#f6f8fa; border:1px solid #eee; border-radius:4px; padding:2px 4px; }
+    a { color:#0a7; text-decoration:none; }
+    a:hover { text-decoration:underline; }
+  </style>
+</head>
+<body>
+  <main id="app"></main>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script>
+    const md = `# Conditions Générales de Vente (CGV) — OptiRH
+**Version :** [1.0]  
+**Date d’entrée en vigueur :** [30/08/2025]
+
+
+
+## 1. Champ d’application
+Les présentes CGV s’appliquent à toute souscription professionnelle au Service OptiRH fourni par **OVE DISTRIBUTION** (l’« **Éditeur** »). Elles prévalent sur tout document non expressément accepté par l’Éditeur.
+
+## 2. Souscription – Licence – Périmètre
+L’abonnement confère un droit d’accès **SaaS** pour le nombre d’utilisateurs/licences convenu. Licence **non exclusive**, **non transférable**, usage interne du Client. Certaines fonctionnalités peuvent être optionnelles.
+
+## 3. Prix – Facturation – Paiement
+Tarifs en **EUR HT**. Facturation **mensuelle** par avance. Paiement à **écheance**. Retard : intérêts au taux légal majoré + **indemnité forfaitaire 40 €** (art. L441‑10 C.com). Révision tarifaire possible à l’échéance avec **préavis de 30 jours**.
+
+## 4. Durée – Renouvellement – Résiliation
+Durée initiale **1 mois** avec **reconduction tacite** par périodes de même durée, sauf dénonciation **30 jours** avant échéance. En cas de manquement grave non réparé sous **15 jours** après mise en demeure, résiliation de plein droit. Le droit de rétractation ne s’applique pas entre professionnels.
+
+## 5. Évolutions du Service
+L’Éditeur peut faire évoluer fonctionnalités et interfaces, en maintenant la **substance** du Service pendant la période contractuelle. Les options nouvelles peuvent être tarifées séparément.
+
+## 6. Réversibilité – Restitution des données
+En fin de contrat, mise à disposition d’un **export** via l’interface d’administration. À défaut, suppression ou anonymisation des données à l’issue des délais légaux/contractuels (cf. Politique de confidentialité). Assistance à la réversibilité sur **devis**.
+
+## 7. Sous‑traitance
+Le Client autorise l’Éditeur à recourir à des **sous‑traitants** (hébergement, stockage, notifications, e‑mail), l’Éditeur demeurant responsable vis‑à‑vis du Client. Une annexe **DPA/Sous‑traitance RGPD** peut compléter le présent document si requis.
+
+## 8. Force majeure
+Aucune partie n’est responsable d’un manquement dû à un événement de **force majeure** pendant sa durée.
+
+## 9. Responsabilité – Limitation
+La responsabilité totale de l’Éditeur, tous chefs confondus, est limitée aux sommes versées par le Client au titre des **12 derniers mois** pour le Service.
+
+## 10. Loi applicable – Juridiction
+Droit **français**. Tribunal compétent : **SEDAN**.
+
+—  
+**Contact facturation/support :** contact@ovedistribution.com
+`;
+    document.getElementById('app').innerHTML = marked.parse(md);
+  </script>
+</body>
+</html>
