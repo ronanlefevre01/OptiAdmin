@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 
-// Lis l'URL de l'API depuis env (Vite ou CRA)
+// URL de ton API (Render, etc.)
 const API_BASE =
   (import.meta as any)?.env?.VITE_OPTIRH_API ||
   (process.env as any)?.REACT_APP_OPTIRH_API ||
@@ -14,7 +14,8 @@ type Modules = {
 };
 
 export default function OptiRHAdmin() {
-  const [licenceKey, setLicenceKey] = useState("OPTI-TEST-0001");
+  // ⚠️ Ici "licenceKey" = code tenant (ex: ACME). Garde le nom pour ne pas te perdre.
+  const [licenceKey, setLicenceKey] = useState("ACME");
   const [name, setName] = useState("Magasin Demo");
   const [siret, setSiret] = useState("12345678900011");
   const [contactEmail, setContactEmail] = useState("owner@demo.fr");
@@ -27,7 +28,11 @@ export default function OptiRHAdmin() {
     announcements: true,
     sales_bonus: true,
   });
+  // UI: "active" | "suspended" → Neon: "active" | "paused"
   const [status, setStatus] = useState<"active" | "suspended">("active");
+
+  // ⚠️ Clé admin à saisir manuellement (NE PAS mettre dans le code en dur)
+  const [adminKey, setAdminKey] = useState("");
   const [out, setOut] = useState<string>("");
 
   async function saveLicence() {
@@ -36,43 +41,71 @@ export default function OptiRHAdmin() {
         setOut("⚠️ API non configurée (VITE_OPTIRH_API / REACT_APP_OPTIRH_API).");
         return;
       }
+      if (!adminKey.trim()) {
+        setOut("⚠️ Renseigne l'Admin API Key (x-admin-key) pour écrire en DB Neon.");
+        return;
+      }
+      if (!licenceKey.trim()) {
+        setOut("⚠️ Code tenant (clé de licence) requis.");
+        return;
+      }
+
       setOut("Envoi…");
+
+      // Map statut UI -> statut DB
+      const dbStatus = status === "suspended" ? "paused" : "active";
+
+      // Payload attendu par /admin/licences (Neon)
       const body = {
-        licence_key: licenceKey.trim(),
-        company: {
-          name: name.trim(),
+        tenant_code: licenceKey.trim(),
+        name: name.trim(),
+        status: dbStatus, // "active" | "paused" | "trial" | "expired" | "disabled"
+        valid_until: expiresAt ? expiresAt : null, // ISO ou null
+        seats: null, // optionnel
+        meta: {
           siret: siret.trim(),
           contact_email: contactEmail.trim(),
           contact_firstname: contactFirst.trim(),
           contact_lastname: contactLast.trim(),
+          modules, // on garde tes switches ici
         },
-        modules,
-        expires_at: expiresAt,
-        status,
       };
 
-      const r = await fetch(`${API_BASE}/api/licences`, {
+      const r = await fetch(`${API_BASE}/admin/licences`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-key": adminKey.trim(), // ⬅️ clé admin côté serveur
+        },
         body: JSON.stringify(body),
       });
+
       const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j?.error || "Erreur API");
-      setOut("✅ Licence créée/mise à jour.");
+      if (!r.ok) throw new Error(j?.error || `Erreur API (${r.status})`);
+
+      setOut("✅ Licence créée/mise à jour en base Neon.");
     } catch (e: any) {
-      setOut("❌ " + e.message);
+      setOut("❌ " + (e?.message || e));
     }
   }
 
   return (
     <div style={styles.wrap}>
-      <h1>Gérer OptiRH — Licences</h1>
+      <h1>Gérer OptiRH — Licences (Neon)</h1>
       <p style={{ color: "#666" }}>
-        Crée/édite une licence (écrit dans le Bin JSONBin via l’API Render).
+        Crée/édite une licence en base Postgres (Neon) via l’endpoint <code>/admin/licences</code>.
       </p>
 
       <div style={styles.grid}>
-        <label style={styles.label}>Clé de licence</label>
+        <label style={styles.label}>Admin API Key (x-admin-key)</label>
+        <input
+          style={styles.input}
+          value={adminKey}
+          onChange={(e) => setAdminKey(e.target.value)}
+          placeholder="colle ici la clé ADMIN_API_KEY"
+        />
+
+        <label style={styles.label}>Code tenant (clé licence)</label>
         <input style={styles.input} value={licenceKey} onChange={(e) => setLicenceKey(e.target.value)} />
 
         <label style={styles.label}>Nom société</label>
@@ -110,7 +143,7 @@ export default function OptiRHAdmin() {
         <label style={styles.label}>Statut</label>
         <select style={styles.input} value={status} onChange={(e) => setStatus(e.target.value as any)}>
           <option value="active">active</option>
-          <option value="suspended">suspended</option>
+          <option value="suspended">suspended (→ paused)</option>
         </select>
       </div>
 
@@ -122,7 +155,8 @@ export default function OptiRHAdmin() {
 
       <hr style={{ margin: "24px 0" }} />
       <small style={{ color: "#888" }}>
-        Astuce : après création, dans l’app OptiRH (mobile) onglet Patron → “Activer ma licence” avec la clé.
+        Astuce : une fois la licence créée, le <b>login</b> de l’app vérifiera la licence dans Neon
+        puis authentifiera l’utilisateur (users.password_hash).
       </small>
     </div>
   );
