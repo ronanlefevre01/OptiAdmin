@@ -1,10 +1,19 @@
 import React, { useState } from "react";
 
-// URL de ton API (Render, etc.)
+// URL de l’API (Vite/CRA)
 const API_BASE =
   (import.meta as any)?.env?.VITE_OPTIRH_API ||
   (process.env as any)?.REACT_APP_OPTIRH_API ||
   "";
+
+// Helpers pour le champ datetime-local
+const toLocalInput = (iso?: string | null) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+const toIsoUtc = (local?: string) => (local ? new Date(local).toISOString() : null);
 
 type Modules = {
   leaves: boolean;
@@ -14,60 +23,59 @@ type Modules = {
 };
 
 export default function OptiRHAdmin() {
-  // ⚠️ Ici "licenceKey" = code tenant (ex: ACME). Garde le nom pour ne pas te perdre.
+  // ⚠️ Ici "licenceKey" = tenant_code (ex: ACME)
   const [licenceKey, setLicenceKey] = useState("ACME");
   const [name, setName] = useState("Magasin Demo");
   const [siret, setSiret] = useState("12345678900011");
   const [contactEmail, setContactEmail] = useState("owner@demo.fr");
   const [contactFirst, setContactFirst] = useState("Jean");
   const [contactLast, setContactLast] = useState("Dupont");
-  const [expiresAt, setExpiresAt] = useState("2026-12-31T23:59:59Z");
+
+  // On stocke la valeur DU CHAMP (locale) ; on n’envoie qu’en ISO au submit
+  const [expiresAtLocal, setExpiresAtLocal] = useState(
+    toLocalInput("2026-12-31T23:59:59Z")
+  );
+
   const [modules, setModules] = useState<Modules>({
     leaves: true,
     calendar: true,
     announcements: true,
     sales_bonus: true,
   });
-  // UI: "active" | "suspended" → Neon: "active" | "paused"
+
+  // UI: "active" | "suspended" (→ paused en DB)
   const [status, setStatus] = useState<"active" | "suspended">("active");
 
-  // ⚠️ Clé admin à saisir manuellement (NE PAS mettre dans le code en dur)
+  // ⚠️ Clé admin (x-admin-key) — ne pas commit en dur
   const [adminKey, setAdminKey] = useState("");
   const [out, setOut] = useState<string>("");
+  const [busy, setBusy] = useState(false);
 
   async function saveLicence() {
     try {
-      if (!API_BASE) {
-        setOut("⚠️ API non configurée (VITE_OPTIRH_API / REACT_APP_OPTIRH_API).");
-        return;
-      }
-      if (!adminKey.trim()) {
-        setOut("⚠️ Renseigne l'Admin API Key (x-admin-key) pour écrire en DB Neon.");
-        return;
-      }
-      if (!licenceKey.trim()) {
-        setOut("⚠️ Code tenant (clé de licence) requis.");
-        return;
-      }
+      if (!API_BASE) return setOut("⚠️ API non configurée (VITE_OPTIRH_API / REACT_APP_OPTIRH_API).");
+      if (!adminKey.trim()) return setOut("⚠️ Renseigne l'Admin API Key (x-admin-key).");
+      if (!licenceKey.trim()) return setOut("⚠️ Code tenant requis.");
 
+      setBusy(true);
       setOut("Envoi…");
 
-      // Map statut UI -> statut DB
-      const dbStatus = status === "suspended" ? "paused" : "active";
+      const dbStatus =
+        status === "suspended" ? "paused" : "active"; // mapping UI -> DB
+      const expiresIso = toIsoUtc(expiresAtLocal);     // ← ISO propre (ou null)
 
-      // Payload attendu par /admin/licences (Neon)
       const body = {
         tenant_code: licenceKey.trim(),
         name: name.trim(),
-        status: dbStatus, // "active" | "paused" | "trial" | "expired" | "disabled"
-        valid_until: expiresAt ? expiresAt : null, // ISO ou null
-        seats: null, // optionnel
+        status: dbStatus,                 // "active" | "paused" | "trial" | "expired" | "disabled"
+        valid_until: expiresIso,          // ISO ou null
+        seats: null,
         meta: {
           siret: siret.trim(),
           contact_email: contactEmail.trim(),
           contact_firstname: contactFirst.trim(),
           contact_lastname: contactLast.trim(),
-          modules, // on garde tes switches ici
+          modules,
         },
       };
 
@@ -75,17 +83,37 @@ export default function OptiRHAdmin() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-admin-key": adminKey.trim(), // ⬅️ clé admin côté serveur
+          "x-admin-key": adminKey.trim(), // l’API accepte x-admin-key / X-Admin-Key
         },
         body: JSON.stringify(body),
       });
 
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j?.error || `Erreur API (${r.status})`);
-
-      setOut("✅ Licence créée/mise à jour en base Neon.");
+      setOut("✅ Licence créée / mise à jour dans Neon.");
     } catch (e: any) {
       setOut("❌ " + (e?.message || e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Petit check lecture seule (utile pour contrôler ce qui est en base)
+  async function checkLicence() {
+    try {
+      if (!API_BASE) return setOut("⚠️ API non configurée.");
+      setBusy(true);
+      setOut("Vérification…");
+      const r = await fetch(
+        `${API_BASE}/api/licences/validate?key=${encodeURIComponent(licenceKey.trim())}`
+      );
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.error || `Erreur API (${r.status})`);
+      setOut("ℹ️ " + JSON.stringify(j, null, 2));
+    } catch (e: any) {
+      setOut("❌ " + (e?.message || e));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -93,7 +121,7 @@ export default function OptiRHAdmin() {
     <div style={styles.wrap}>
       <h1>Gérer OptiRH — Licences (Neon)</h1>
       <p style={{ color: "#666" }}>
-        Crée/édite une licence en base Postgres (Neon) via l’endpoint <code>/admin/licences</code>.
+        Création/édition d’une licence Postgres via <code>/admin/licences</code>.
       </p>
 
       <div style={styles.grid}>
@@ -106,7 +134,11 @@ export default function OptiRHAdmin() {
         />
 
         <label style={styles.label}>Code tenant (clé licence)</label>
-        <input style={styles.input} value={licenceKey} onChange={(e) => setLicenceKey(e.target.value)} />
+        <input
+          style={styles.input}
+          value={licenceKey}
+          onChange={(e) => setLicenceKey(e.target.value.toUpperCase())}
+        />
 
         <label style={styles.label}>Nom société</label>
         <input style={styles.input} value={name} onChange={(e) => setName(e.target.value)} />
@@ -123,8 +155,13 @@ export default function OptiRHAdmin() {
         <label style={styles.label}>Contact — Nom</label>
         <input style={styles.input} value={contactLast} onChange={(e) => setContactLast(e.target.value)} />
 
-        <label style={styles.label}>Expiration (ISO)</label>
-        <input style={styles.input} value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
+        <label style={styles.label}>Expiration</label>
+        <input
+          type="datetime-local"
+          style={styles.input}
+          value={expiresAtLocal}
+          onChange={(e) => setExpiresAtLocal(e.target.value)}
+        />
 
         <label style={styles.label}>Modules</label>
         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
@@ -148,15 +185,20 @@ export default function OptiRHAdmin() {
       </div>
 
       <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
-        <button style={styles.btnPrimary} onClick={saveLicence}>Enregistrer la licence</button>
+        <button style={styles.btnPrimary} onClick={saveLicence} disabled={busy}>
+          {busy ? "…" : "Enregistrer la licence"}
+        </button>
+        <button style={styles.btnGhost} onClick={checkLicence} disabled={busy}>
+          Vérifier la licence
+        </button>
       </div>
 
       <pre style={styles.out}>{out || " "}</pre>
 
       <hr style={{ margin: "24px 0" }} />
       <small style={{ color: "#888" }}>
-        Astuce : une fois la licence créée, le <b>login</b> de l’app vérifiera la licence dans Neon
-        puis authentifiera l’utilisateur (users.password_hash).
+        Après création, l’app mobile utilisera <code>/api/licences/validate</code> puis
+        <code> /auth/activate</code>/<code>/auth/login</code> (users.password_hash).
       </small>
     </div>
   );
@@ -174,6 +216,7 @@ const styles: Record<string, React.CSSProperties> = {
   label: { fontWeight: 600 },
   input: { padding: "10px 12px", border: "1px solid #ddd", borderRadius: 8 },
   btnPrimary: { padding: "10px 16px", borderRadius: 8, border: "none", background: "#6f42c1", color: "#fff", cursor: "pointer" },
+  btnGhost: { padding: "10px 16px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", cursor: "pointer" },
   out: {
     background: "#f7f7f9",
     border: "1px solid #eee",
