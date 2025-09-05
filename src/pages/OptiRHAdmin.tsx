@@ -193,6 +193,39 @@ export default function OptiRHAdmin() {
     }
   }
 
+  async function resetOwnerPassword() {
+  try {
+    if (!API_BASE) return setOut("⚠️ API non configurée.");
+    if (!adminKey.trim()) return setOut("⚠️ Renseigne l'Admin API Key.");
+    if (!licenceKey.trim()) return setOut("⚠️ Code tenant requis.");
+    setBusy(true);
+    setOut("Réinitialisation…");
+
+    const r = await fetch(`${API_BASE}/admin/reset-owner-password`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-key": adminKey.trim(),
+      },
+      body: JSON.stringify({ tenant_code: licenceKey.trim() }), // optionnel: new_password
+    });
+
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j?.error || `Erreur API (${r.status})`);
+    // temp_password est renvoyé si généré côté serveur
+    setOut(
+      j?.temp_password
+        ? `✅ Reset OK. Mot de passe temporaire: ${j.temp_password}`
+        : `✅ Reset OK.`
+    );
+  } catch (e: any) {
+    setOut("❌ " + (e?.message || e));
+  } finally {
+    setBusy(false);
+  }
+}
+
+
   return (
     <div style={styles.wrap}>
       <h1>Gérer OptiRH — Licences (Neon)</h1>
@@ -366,6 +399,13 @@ export default function OptiRHAdmin() {
         <button style={styles.btnGhost} onClick={reloadList} disabled={listBusy}>
           Rafraîchir la liste
         </button>
+        <button
+    style={{ ...styles.btnGhost, borderColor: "#0aa" }}
+    onClick={resetOwnerPassword}
+    disabled={busy || !licenceKey.trim() || !adminKey.trim()}
+  >
+    Réinitialiser mot de passe OWNER
+  </button>
       </div>
 
       <pre style={styles.out}>{out || " "}</pre>
