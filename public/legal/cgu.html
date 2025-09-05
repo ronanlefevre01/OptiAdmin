@@ -23,62 +23,69 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script>
     const md = `# Conditions Générales d’Utilisation (CGU) — OptiRH
-**Version :** [1.0]  
-**Date d’entrée en vigueur :** [30/08/2025]
-
-
+**Version :** 1.0  
+**Date d’entrée en vigueur :** 30/08/2025
 
 ## 1. Objet
-Les présentes Conditions Générales d’Utilisation (les « **CGU** ») encadrent l’accès et l’utilisation d’OptiRH (applications mobiles et interface web), édité par **OVE DISTRIBUTION**, SAS, au capital de 1000€, immatriculée au RCS de SEDAN sous le n° 914682687, sise 3 rue du Docteur LANDES 08190 ASFELD (France) (l’« **Éditeur** », « **nous** »).
+Les présentes Conditions Générales d’Utilisation (les « **CGU** ») encadrent l’accès et l’utilisation d’OptiRH (applications mobiles et interface web), édité par **OVE DISTRIBUTION**, SAS au capital de 1 000 €, immatriculée au **RCS SEDAN** sous le n° **914 682 687**, sise **3 rue du Docteur LANDES, 08190 Asfeld (France)** (l’« **Éditeur** », « **nous** »).
 
-OptiRH permet notamment : (i) la gestion/validation des **congés** et absences, (ii) un **agenda partagé**, (iii) la publication d’**annonces** internes (messages/PDF), (iv) la gestion de **profils employés**, et (v) un module **Bonus/Ventes** optionnel.
+OptiRH permet notamment : (i) la gestion et la validation des **congés** et absences, (ii) un **agenda partagé**, (iii) la publication d’**annonces** internes (messages/PDF), (iv) la gestion de **profils employés**, et (v) un module **Bonus/Ventes** optionnel.
 
 Toute connexion vaut acceptation sans réserve des CGU.
 
 ## 2. Définitions
-- **Client** : personne morale souscrivant l’abonnement OptiRH.  
-- **Utilisateur** : personne physique habilitée par le Client (employé, manager, administrateur).  
-- **Compte** : accès personnel avec identifiants.  
-- **Contenus** : données/fiche employé, demandes de congés, événements, annonces, fichiers, etc.
+- **Client** : personne morale souscrivant l’abonnement OptiRH.  
+- **Utilisateur** : personne physique habilitée par le Client (employé, RH, administrateur).  
+- **Compte** : accès personnel avec identifiants.  
+- **Contenus** : données RH (fiches, congés, événements, annonces, fichiers, etc.).
 
 ## 3. Accès au Service
 L’accès nécessite un Compte créé par le Client. L’Utilisateur conserve ses identifiants **confidentiels** et signale tout accès non autorisé. L’Éditeur peut **suspendre** l’accès en cas de violation des CGU, atteinte à la sécurité ou demande du Client.
 
 ## 4. Fonctionnalités (synthèse)
-- **Congés** : demandes, validation, modification/annulation par profils autorisés, détection de conflits.  
-- **Agenda partagé** : création/MAJ d’événements liés aux congés approuvés et autres événements RH.  
-- **Annonces** : messages internes et/ou PDF publiés par le Client.  
-- **Profils** : identité et coordonnées.  
-- **Bonus/Ventes** : si activé par le Client, suivi des formules et des entrées déclarées.
+- **Congés** : demandes, validation, modification/annulation par profils autorisés, détection de conflits.  
+- **Agenda partagé** : création/mise à jour d’événements liés aux congés approuvés et autres événements RH.  
+- **Annonces** : messages internes et/ou PDF publiés par le Client.  
+- **Profils** : identité et coordonnées (ex. téléphone, adresse).  
+- **Bonus/Ventes** : si activé par le Client, suivi des formules et des entrées déclarées.
 
 L’Éditeur peut faire évoluer le Service conformément à l’article **11**.
 
 ## 5. Obligations des Utilisateurs
-Les Utilisateurs s’engagent à (i) respecter la loi et les politiques internes du Client ; (ii) ne pas porter atteinte aux droits de tiers ; (iii) ne pas tenter d’atteinte à la sécurité, d’extraction massive, d’ingénierie inverse ; (iv) maintenir des informations exactes.
+Les Utilisateurs s’engagent à (i) respecter la loi et les politiques internes du Client ; (ii) ne pas porter atteinte aux droits de tiers ; (iii) ne pas tenter d’atteinte à la sécurité, d’extraction massive, d’ingénierie inverse ; (iv) maintenir des informations exactes et à jour.
 
 ## 6. Propriété intellectuelle
-Le Service, ses logiciels, codes, interfaces, visuels et marques demeurent la propriété exclusive de l’Éditeur. Aucune cession n’est consentie. Le Client/Utilisateur dispose d’un **droit d’usage** non exclusif, non transférable, pour la durée de l’abonnement.
+Le Service, ses logiciels, codes, interfaces, visuels et marques demeurent la propriété exclusive de l’Éditeur. Aucune cession n’est consentie. Le Client/Utilisateur dispose d’un **droit d’usage** non exclusif et non transférable pendant la durée de l’abonnement.
 
 ## 7. Disponibilité – Maintenance – Sécurité
 L’Éditeur emploie des moyens raisonnables pour assurer disponibilité et sécurité (authentification, chiffrement en transit, journalisation). Des **interventions planifiées** peuvent survenir. En cas d’incident, le rétablissement est effectué au plus vite.
 
-## 8. Support
-Support : **contact@ovedistribution.com** les jours ouvrés, horaires de bureau. Délais indicatifs.
+## 8. Architecture & Données (Neon / Drive / Push)
+- **Base de données** : les données métier (comptes, congés, paramètres, licences, etc.) sont stockées chez un prestataire **PostgreSQL managé (Neon)**, au sein de l’UE/EEE (ou zone équivalente annoncée par l’Éditeur).  
+- **Fichiers PDF d’annonces** : hébergés sur **Google Drive** (compte de service) ; des liens de consultation et/ou de téléchargement peuvent être générés (publics si activé par le Client).  
+- **Notifications push** : l’application utilise **Expo push**. Les **jetons** d’appareil (tokens) sont enregistrés pour l’envoi de notifications et peuvent être activés/désactivés par l’Utilisateur dans l’application (ou supprimés lors de la déconnexion/révocation).  
+- **Sauvegardes & logs** : des sauvegardes et journaux techniques peuvent être conservés pour l’exploitation, la traçabilité et la sécurité.
 
-## 9. Responsabilité
-Le Service est fourni « **en l’état** ». L’Éditeur n’est responsable que des **dommages directs** prouvés, à l’exclusion des dommages indirects (perte de données/CA…). La responsabilité totale est **limitée** aux sommes perçues au titre des **12 derniers mois**.
+Les modalités de traitement des données à caractère personnel sont détaillées dans la **Politique de confidentialité** (document séparé).
 
-## 10. Durée – Suspension – Résiliation
+## 9. Support
+Support : **contact@ovedistribution.com** les jours ouvrés, horaires de bureau (délais indicatifs).
+
+## 10. Responsabilité
+Le Service est fourni « **en l’état** ». L’Éditeur n’est responsable que des **dommages directs** prouvés, à l’exclusion des dommages indirects (perte de données/CA, etc.). La responsabilité totale est **limitée** aux sommes perçues au titre des **12 derniers mois**.
+
+## 11. Durée – Suspension – Résiliation
 Les CGU s’appliquent pendant l’utilisation. L’Éditeur peut suspendre un Compte dans les cas prévus à l’article 3. La résiliation contractuelle relève des **CGV**.
 
-## 11. Évolutions
-L’Éditeur peut modifier les CGU et/ou le Service. Information par tout moyen utile. La poursuite d’utilisation vaut acceptation.
+## 12. Évolutions
+L’Éditeur peut modifier les CGU et/ou le Service. L’Utilisateur/Client est informé par tout moyen utile. La poursuite d’utilisation vaut acceptation des modifications.
 
-## 12. Loi applicable – Juridiction
-Droit **français**. Juridiction compétente : **[Tribunal compétent]**.
+## 13. Loi applicable – Juridiction
+Droit **français**. Compétence attribuée aux **tribunaux du ressort du siège social de l’Éditeur**, sous réserve d’une disposition légale d’ordre public contraire.
 
-—  
-**Éditeur :** OVE DISTRIBUTION — 3 rue du Docteur LANDES08190 ASFELD — contact@ovedistribution@gmail.com — www.ovedistribution.com
+—
+
+**Éditeur :** OVE DISTRIBUTION — 3 rue du Docteur LANDES, 08190 Asfeld — **contact@ovedistribution.com** — https://www.ovedistribution.com
 `;
     document.getElementById('app').innerHTML = marked.parse(md);
   </script>

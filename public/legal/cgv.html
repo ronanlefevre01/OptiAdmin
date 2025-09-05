@@ -3,63 +3,76 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Conditions Générales de Vente (CGV) — OptiRH</title>
-  <meta name="robots" content="noindex">
+  <title>CGV — OptiRH</title>
   <style>
-    :root { --max: 900px; }
-    body { margin:0; font:16px/1.6 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:#111; background:#fff; }
-    main { max-width:var(--max); margin:0 auto; padding:32px 16px 80px; }
-    table { border-collapse:collapse; width:100%; }
-    th, td { border:1px solid #e5e5e5; padding:8px 10px; vertical-align:top; }
-    th { background:#fafafa; text-align:left; }
-    pre { background:#f6f8fa; border:1px solid #eee; border-radius:6px; padding:12px; overflow:auto; }
-    code { background:#f6f8fa; border:1px solid #eee; border-radius:4px; padding:2px 4px; }
-    a { color:#0a7; text-decoration:none; }
-    a:hover { text-decoration:underline; }
-  </style>
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; line-height: 1.6; color:#111; margin:0; background:#fff; }
+  .container { max-width: 900px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 28px; margin: 0 0 8px; }
+  h2 { font-size: 20px; border-bottom: 1px solid #eee; padding-bottom: 4px; margin-top: 24px; }
+  h3 { font-size: 16px; margin-top: 16px; }
+  code, pre { background:#f6f8fa; padding:2px 4px; border-radius:4px; }
+  .muted { color:#666; font-size:12px; }
+</style>
 </head>
 <body>
-  <main id="app"></main>
+  <div class="container">
+    <div id="app"></div>
+      </div>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script>
     const md = `# Conditions Générales de Vente (CGV) — OptiRH
-**Version :** [1.0]  
-**Date d’entrée en vigueur :** [30/08/2025]
+**Version :** 1.0  
+**Date d’entrée en vigueur :** 30/08/2025
 
+## 1. Objet
+Les présentes CGV régissent la **licence SaaS OptiRH** souscrite par le **Client** (magasin/société) pour ses Utilisateurs (OWNER, HR, EMPLOYEE).
 
+## 2. Licence & Périmètre
+- La souscription confère un **droit d’usage** non exclusif, non cessible, pour la durée de l’abonnement et **dans la limite du code entreprise** associé.  
+- Les modules activés (congés, annonces PDF, ventes bonifiées…) sont définis par la licence et peuvent évoluer.
+- La validité d’une licence dépend de son **statut** (*active* ou *trial*) et de sa **date d’expiration**. Ces informations sont stockées dans **Neon** (*licences*, *tenants*).
 
-## 1. Champ d’application
-Les présentes CGV s’appliquent à toute souscription professionnelle au Service OptiRH fourni par **OVE DISTRIBUTION** (l’« **Éditeur** »). Elles prévalent sur tout document non expressément accepté par l’Éditeur.
-
-## 2. Souscription – Licence – Périmètre
-L’abonnement confère un droit d’accès **SaaS** pour le nombre d’utilisateurs/licences convenu. Licence **non exclusive**, **non transférable**, usage interne du Client. Certaines fonctionnalités peuvent être optionnelles.
-
-## 3. Prix – Facturation – Paiement
-Tarifs en **EUR HT**. Facturation **mensuelle** par avance. Paiement à **écheance**. Retard : intérêts au taux légal majoré + **indemnité forfaitaire 40 €** (art. L441‑10 C.com). Révision tarifaire possible à l’échéance avec **préavis de 30 jours**.
+## 3. Tarifs – Facturation – Paiement
+- Les prix sont indiqués **HT**, sauf mention contraire.  
+- Facturation selon la formule choisie (mensuelle/annuelle, nombre d’utilisateurs ou palier).  
+- Les factures sont payables à réception par les moyens acceptés. Tout retard peut entraîner intérêts et/ou suspension de service.
+- En cas d’essai (*trial*), les conditions et limites sont précisées lors de l’activation.
 
 ## 4. Durée – Renouvellement – Résiliation
-Durée initiale **1 mois** avec **reconduction tacite** par périodes de même durée, sauf dénonciation **30 jours** avant échéance. En cas de manquement grave non réparé sous **15 jours** après mise en demeure, résiliation de plein droit. Le droit de rétractation ne s’applique pas entre professionnels.
+- L’abonnement court pour la période choisie et se **renouvelle** à l’identique, sauf résiliation à l’échéance.  
+- Chaque partie peut résilier pour manquement grave non remédié après notification écrite.  
+- En cas de résiliation/suspension pour impayé ou licence expirée, l’accès peut être **interrompu**. Le Client reste redevable des sommes échues.
 
-## 5. Évolutions du Service
-L’Éditeur peut faire évoluer fonctionnalités et interfaces, en maintenant la **substance** du Service pendant la période contractuelle. Les options nouvelles peuvent être tarifées séparément.
+## 5. Services & Maintenance
+- Services fournis **en l’état** ; l’Éditeur assure des mises à jour régulières (sécurité, améliorations).  
+- Le support est assuré par voie électronique (cf. contact dans l’interface). Des niveaux de service peuvent être proposés contractuellement.
 
-## 6. Réversibilité – Restitution des données
-En fin de contrat, mise à disposition d’un **export** via l’interface d’administration. À défaut, suppression ou anonymisation des données à l’issue des délais légaux/contractuels (cf. Politique de confidentialité). Assistance à la réversibilité sur **devis**.
+## 6. Données & Sous-traitance
+- Les données applicatives sont stockées dans **Neon (PostgreSQL)** ; les PDF d’annonces peuvent être **hébergés sur Google Drive**.  
+- Les **notifications push** s’appuient sur **Expo** (APNs/FCM).  
+- Le Client demeure responsable du traitement et du paramétrage ; l’Éditeur agit en sous-traitant.  
+- À l’échéance, le Client peut **exporter** ses données. La suppression/archivage intervient dans des délais raisonnables compte tenu des obligations légales et de sauvegarde.
 
-## 7. Sous‑traitance
-Le Client autorise l’Éditeur à recourir à des **sous‑traitants** (hébergement, stockage, notifications, e‑mail), l’Éditeur demeurant responsable vis‑à‑vis du Client. Une annexe **DPA/Sous‑traitance RGPD** peut compléter le présent document si requis.
+## 7. Responsabilités & Limitation
+- Chacune des parties répond de ses fautes prouvées.  
+- L’Éditeur n’est pas responsable des dommages indirects, perte de chiffre d’affaires, d’image, ou des conséquences d’un mauvais paramétrage (ex. formules de primes).  
+- La responsabilité cumulée de l’Éditeur, toutes causes confondues, est **limitée au montant des sommes versées par le Client** au cours des 12 derniers mois.
 
-## 8. Force majeure
-Aucune partie n’est responsable d’un manquement dû à un événement de **force majeure** pendant sa durée.
+## 8. Propriété intellectuelle
+- L’Éditeur conserve l’ensemble des droits de propriété intellectuelle sur l’Application.  
+- Aucune cession de droits n’est consentie au Client en dehors du droit d’usage.
 
-## 9. Responsabilité – Limitation
-La responsabilité totale de l’Éditeur, tous chefs confondus, est limitée aux sommes versées par le Client au titre des **12 derniers mois** pour le Service.
+## 9. Force majeure
+- Aucune des parties n’est responsable d’un manquement dû à un événement de **force majeure** habituellement reconnu par la jurisprudence.
 
-## 10. Loi applicable – Juridiction
-Droit **français**. Tribunal compétent : **SEDAN**.
+## 10. Preuve & acceptation
+- L’acceptation des CGV par le **OWNER** peut être demandée dans l’Application. L’enregistrement *date/version/utilisateur* est stocké dans **Neon** (*legal_acceptances*).
 
-—  
-**Contact facturation/support :** contact@ovedistribution.com
+## 11. Droit applicable – Juridiction
+- Droit **français**. Compétence exclusive des tribunaux du siège de l’Éditeur, sous réserve des dispositions d’ordre public.
+
+## 12. Contact
+Toute question commerciale : utiliser le contact indiqué dans l’interface (licence / facturation) ou le **contact du magasin**.
 `;
     document.getElementById('app').innerHTML = marked.parse(md);
   </script>
