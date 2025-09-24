@@ -1,13 +1,13 @@
 // /api/_utils/jsonbin.ts
-const BIN_ID = process.env.JSONBIN_BIN_ID;
+const BIN_ID = process.env.JSONBIN_MEMBERS_BIN;
 const MASTER_KEY = process.env.JSONBIN_MASTER_KEY;
 const READ_KEY = process.env.JSONBIN_READ_KEY;
 
 if (!BIN_ID || !MASTER_KEY) {
-  console.warn("JSONBin env manquantes (JSONBIN_BIN_ID / JSONBIN_MASTER_KEY)");
+  console.warn("JSONBin env manquantes (JSONBIN_MEMBERS_BIN / JSONBIN_MASTER_KEY)");
 }
 
-const BASE = "https://api.jsonbin.io/v3/b";
+const BASE = "https://api.jsonbin.io/v3";
 
 async function ensureOk(res: Response) {
   if (!res.ok) {
