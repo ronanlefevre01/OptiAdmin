@@ -7,7 +7,7 @@ if (!BIN_ID || !MASTER_KEY) {
   console.warn("JSONBin env manquantes (JSONBIN_MEMBERS_BIN / JSONBIN_MASTER_KEY)");
 }
 
-const BASE = "https://api.jsonbin.io/v3";
+const BASE = "https://api.jsonbin.io/v3/b";
 
 async function ensureOk(res: Response) {
   if (!res.ok) {
