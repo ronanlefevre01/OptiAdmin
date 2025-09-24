@@ -1,6 +1,7 @@
+// HomePage.tsx
 import React from 'react';
 
-type AppKey = 'OptiCOM' | 'OptiMesure' | 'OptiRH';
+export type AppKey = 'OptiCOM' | 'OptiMesure' | 'OptiRH' | 'SiteOVE';
 
 const HomePage = ({ onSelect }: { onSelect: (app: AppKey) => void }) => {
   return (
@@ -29,32 +30,24 @@ const HomePage = ({ onSelect }: { onSelect: (app: AppKey) => void }) => {
         >
           🟪 Gérer OptiRH
         </button>
+
+        <button
+          style={{ ...styles.button, background: '#0b5ed7' }}
+          onClick={() => onSelect('SiteOVE')}
+          title="Membres + Commandes du site B2B"
+        >
+          🔷 Site OVEDISTRIBUTION
+        </button>
       </div>
     </div>
   );
 };
 
 const styles: Record<string, React.CSSProperties> = {
-  container: {
-    padding: '50px',
-    textAlign: 'center',
-    fontFamily: 'sans-serif',
-  },
-  title: {
-    fontSize: '32px',
-    marginBottom: '20px',
-  },
-  subtitle: {
-    fontSize: '18px',
-    marginBottom: '40px',
-    color: '#555',
-  },
-  buttonContainer: {
-    display: 'flex',
-    justifyContent: 'center',
-    gap: '24px',
-    flexWrap: 'wrap',
-  },
+  container: { padding: '50px', textAlign: 'center', fontFamily: 'sans-serif' },
+  title: { fontSize: '32px', marginBottom: '20px' },
+  subtitle: { fontSize: '18px', marginBottom: '40px', color: '#555' },
+  buttonContainer: { display: 'flex', justifyContent: 'center', gap: '24px', flexWrap: 'wrap' },
   button: {
     fontSize: '18px',
     padding: '16px 28px',
