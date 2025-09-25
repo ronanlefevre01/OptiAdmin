@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@radix-ui/react-tabs": "^1.1.12",
-    "@types/node": "^24.0.14",
     "bcryptjs": "^3.0.2",
     "class-variance-authority": "^0.7.1",
     "cors": "^2.8.5",
@@ -41,6 +40,8 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/jszip": "^3.4.0",
     "@types/multer": "^2.0.0",
+    "@types/node": "^24.5.2",
+    "@types/pg": "^8.15.5",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
     "@vercel/node": "^5.3.12",
