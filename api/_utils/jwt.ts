@@ -1,15 +1,9 @@
 import jwt from 'jsonwebtoken';
-
-const SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
-
+const SECRET = process.env.JWT_SECRET || 'dev-secret';
 export type AuthUser = { tenant_id: string; member_id: string; role?: string };
-
-export function signJwt(payload: AuthUser, expires = '7d') {
-  return jwt.sign(payload, SECRET, { expiresIn: expires });
-}
-
-export function requireJwt(authHeader?: string): AuthUser {
-  const token = (authHeader || '').startsWith('Bearer ') ? authHeader!.slice(7) : '';
-  if (!token) throw new Error('unauthorized');
-  return jwt.verify(token, SECRET) as AuthUser;
+export const signJwt = (p: AuthUser, e='7d') => jwt.sign(p, SECRET, { expiresIn: e });
+export function requireJwt(auth?: string): AuthUser {
+  const t = (auth || '').startsWith('Bearer ') ? auth!.slice(7) : '';
+  if (!t) throw new Error('unauthorized');
+  return jwt.verify(t, SECRET) as AuthUser;
 }

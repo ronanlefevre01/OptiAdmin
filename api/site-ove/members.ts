@@ -1,81 +1,90 @@
-// /api/site-ove/members.ts
+// /api/site-ove/members.ts  (Neon + JWT, plus de JSONBin)
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { jsonbinGet, jsonbinPut } from "../_utils/jsonbin";
+import { q } from "../_utils/db";
+import { setCors, handleOptions } from "../_utils/cors";
+import { requireJwt } from "../_utils/jwt";
 import bcrypt from "bcryptjs";
 
-type Member = {
+type MemberRow = {
   id: string;
+  tenant_id: string;
   email: string;
-  name?: string;
+  name: string | null;
   role: "client" | "admin" | "demo";
   enabled: boolean;
   created_at: string;
-  password_hash: string;
 };
 
 const SALT_ROUNDS = 10;
 
-function generateId() {
-  return Math.random().toString(36).slice(2, 10);
-}
-function generatePassword(len = 10) {
-  const chars =
-    "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789@#-_";
-  return Array.from({ length: len }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-}
-
-// CORS minimal si tu appelles depuis un autre domaine
-function setCORS(res: VercelResponse) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-}
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  setCORS(res);
-  if (req.method === "OPTIONS") return res.status(204).end();
+  if (req.method === "OPTIONS") return handleOptions(req, res);
+  setCors(req, res);
 
   try {
+    // --------- GET: liste des membres du tenant ----------
     if (req.method === "GET") {
-      const store = await jsonbinGet();
-      const members: Member[] = Array.isArray(store.members) ? store.members : [];
-      return res.status(200).json(members);
+      const u = requireJwt(req.headers.authorization);
+      const { rows } = await q<MemberRow>(
+        `SELECT id, tenant_id, email, name, role, enabled, created_at
+           FROM members
+          WHERE tenant_id = $1
+          ORDER BY created_at DESC`,
+        [u.tenant_id]
+      );
+      return res.status(200).json(rows);
     }
 
+    // --------- POST: créer/mettre à jour un membre ----------
     if (req.method === "POST") {
-      const { email, name, role, password } = req.body || {};
-      if (!email) return res.status(400).json({ error: "email requis" });
+      // Autorisations :
+      // - Soit appel depuis l’admin avec X-Admin-Key + tenant_id fourni
+      // - Soit appel depuis un membre connecté (JWT) du tenant (idéalement role=admin)
+      const adminKey = process.env.ADMIN_API_KEY || "";
+      const fromAdmin = req.headers["x-admin-key"] === adminKey;
 
-      const store = await jsonbinGet();
-      const members: Member[] = Array.isArray(store.members) ? store.members : [];
+      let tenantId: string | null = null;
+      let requesterRole: string | undefined;
 
-      if (members.some((m) => m.email.toLowerCase() === String(email).toLowerCase())) {
-        return res.status(409).json({ error: "Membre déjà existant" });
+      if (fromAdmin) {
+        tenantId = String((req.body && req.body.tenant_id) || "");
+        if (!tenantId) return res.status(400).json({ error: "missing_tenant_id" });
+      } else {
+        const u = requireJwt(req.headers.authorization);
+        tenantId = u.tenant_id;
+        requesterRole = u.role;
+        // ici tu peux imposer: if (requesterRole !== 'admin') return res.status(403).json({ error: 'forbidden' });
       }
 
-      const plain = password && String(password).trim().length >= 6 ? String(password) : generatePassword();
+      const { email, name = "", role = "client", password } = req.body || {};
+      if (!email) return res.status(400).json({ error: "missing_email" });
+
+      const plain =
+        password && String(password).trim().length >= 6
+          ? String(password).trim()
+          : Math.random().toString(36).slice(2, 10);
+
       const password_hash = await bcrypt.hash(plain, SALT_ROUNDS);
 
-      const created: Member = {
-        id: generateId(),
-        email: String(email).trim(),
-        name: (name || "").trim(),
-        role: (role || "client") as Member["role"],
-        enabled: true,
-        created_at: new Date().toISOString(),
-        password_hash,
-      };
+      const { rows } = await q<MemberRow>(
+        `INSERT INTO members (tenant_id, email, name, role, enabled, password_hash)
+         VALUES ($1, LOWER($2), $3, $4, true, $5)
+         ON CONFLICT (tenant_id, email)
+         DO UPDATE SET name = EXCLUDED.name, role = EXCLUDED.role
+         RETURNING id, tenant_id, email, name, role, enabled, created_at`,
+        [tenantId, email, name, role, password_hash]
+      );
 
-      const next = { ...store, members: [created, ...members] };
-      await jsonbinPut(next);
+      // On renvoie le mot de passe en clair UNIQUEMENT aux appels admin
+      const payload: any = rows[0];
+      if (fromAdmin) payload.password = plain;
 
-      // On renvoie le mot de passe généré pour que tu puisses le communiquer
-      return res.status(201).json({ ...created, password: plain });
+      return res.status(201).json(payload);
     }
 
-    return res.status(405).json({ error: "Method not allowed" });
+    return res.status(405).json({ error: "method_not_allowed" });
   } catch (err: any) {
-    console.error("members handler error:", err?.message || err);
-    return res.status(500).json({ error: "server_error", detail: String(err?.message || err) });
+    const status = err?.message === "unauthorized" ? 401 : 500;
+    return res.status(status).json({ error: err?.message || "server_error" });
   }
 }
