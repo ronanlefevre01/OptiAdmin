@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { setCors, handleOptions } from '../_utils/cors';
-import { q } from '../_utils/db';
-import { requireJwt } from '../_utils/jwt';
+import { setCorsOVE as setCors, handleOptionsOVE as handleOptions } from '../_utils/corsOVE';
+import { qOVE as q } from '../_utils/dbOVE';
+import { requireJwtOVE as requireJwt } from '../_utils/jwtOVE';
 
 type TicketRow = {
   id: string;
@@ -12,17 +12,13 @@ type TicketRow = {
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Préflight CORS
   if (req.method === 'OPTIONS') return handleOptions(req, res);
   setCors(req, res);
 
   try {
-    // JWT requis
     const user = requireJwt(req.headers.authorization);
 
-    // -------------------------
     // GET /api/tickets?status=open|closed|...
-    // -------------------------
     if (req.method === 'GET') {
       const statusFilter = String(req.query.status ?? '').trim().toLowerCase();
 
@@ -59,18 +55,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const total = Number(countRows[0]?.count ?? 0);
 
-      return res.status(200).json({
-        page,
-        pageSize: size,
-        total,
-        items,
-      });
+      return res.status(200).json({ page, pageSize: size, total, items });
     }
 
-    // -------------------------
-    // POST /api/tickets
-    // body: { orderId?, subject, message }
-    // -------------------------
+    // POST /api/tickets  (body: { orderId?, subject, message })
     if (req.method === 'POST') {
       const { orderId, subject, message } = (req.body ?? {}) as {
         orderId?: string;
@@ -80,12 +68,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const cleanSubject = String(subject ?? '').trim().slice(0, 200);
       const cleanMessage = String(message ?? '').trim().slice(0, 5000);
+      if (!cleanSubject || !cleanMessage) return res.status(400).json({ error: 'missing_fields' });
 
-      if (!cleanSubject || !cleanMessage) {
-        return res.status(400).json({ error: 'missing_fields' });
-      }
-
-      // Si un orderId est fourni, vérifier qu'il appartient au même tenant & membre
       if (orderId) {
         const exists = await q<{ id: string }>(
           `SELECT id
@@ -94,12 +78,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             LIMIT 1`,
           [orderId, user.tenant_id, user.member_id]
         );
-        if (!exists.length) {
-          return res.status(404).json({ error: 'order_not_found' });
-        }
+        if (!exists.length) return res.status(404).json({ error: 'order_not_found' });
       }
 
-      // Créer le ticket
       const created = await q<{ id: string }>(
         `INSERT INTO public.tickets (tenant_id, member_id, order_id, subject, status)
          VALUES ($1, $2, $3, $4, 'open')
@@ -109,7 +90,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const ticketId = created[0]?.id;
 
-      // (Optionnel) insérer le premier message si tu as une table tickets_messages
+      // // Optionnel si table tickets_messages
       // await q(
       //   `INSERT INTO public.tickets_messages (ticket_id, member_id, author_role, body)
       //     VALUES ($1, $2, 'client', $3)`,

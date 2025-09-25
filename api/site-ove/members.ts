@@ -1,8 +1,8 @@
-// /api/site-ove/members.ts  (Neon + JWT)
+// /api/site-ove/members.ts (Neon + JWT OVE)
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { q } from "../_utils/db";                  // <- q() renvoie T[] (tableau)
-import { setCors, handleOptions } from "../_utils/cors";
-import { requireJwt } from "../_utils/jwt";
+import { qOVE as q } from "../_utils/dbOVE";
+import { setCorsOVE as setCors, handleOptionsOVE as handleOptions } from "../_utils/corsOVE";
+import { requireJwtOVE as requireJwt } from "../_utils/jwtOVE";
 import bcrypt from "bcryptjs";
 
 type MemberRow = {
@@ -23,8 +23,8 @@ function boolOrDefault(v: unknown, d = true) {
   if (typeof v === "boolean") return v;
   if (typeof v === "string") {
     const s = v.trim().toLowerCase();
-    if (["true", "1", "yes", "y"].includes(s)) return true;
-    if (["false", "0", "no", "n"].includes(s)) return false;
+    if (["true","1","yes","y"].includes(s)) return true;
+    if (["false","0","no","n"].includes(s)) return false;
   }
   return d;
 }
@@ -34,18 +34,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(req, res);
 
   try {
-    // --- lecture robuste de la clé admin (header ou query) ---
     const adminKey = (process.env.ADMIN_API_KEY || "").trim();
     const h = req.headers["x-admin-key"];
     const incomingHeader = Array.isArray(h) ? (h[0] ?? "").trim() : String(h ?? "").trim();
     const incomingQuery = String((req.query?.admin_key as string) ?? "").trim();
     const providedKey = incomingHeader || incomingQuery;
-
     const fromAdmin = !!adminKey && providedKey === adminKey;
     const adminKeyWasProvided = !!providedKey;
-    if (adminKeyWasProvided && !fromAdmin) {
-      return res.status(401).json({ error: "bad_admin_key" });
-    }
+    if (adminKeyWasProvided && !fromAdmin) return res.status(401).json({ error: "bad_admin_key" });
 
     // ---------- GET ----------
     if (req.method === "GET") {
@@ -65,7 +61,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json(rows);
     }
 
-    // ---------- POST (upsert robuste + erreurs parlantes) ----------
+    // ---------- POST ----------
     if (req.method === "POST") {
       let tenantId = "";
       if (fromAdmin) {
@@ -76,16 +72,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         tenantId = u.tenant_id;
       }
 
-      // 1) Vérifie que le tenant existe
-      const t = await q<{ id: string }>(
-        `SELECT id FROM public.tenants WHERE id = $1 LIMIT 1`,
-        [tenantId]
-      );
-      if (!t.length) {
-        return res.status(400).json({ error: "unknown_tenant", tenant_id: tenantId });
-      }
+      // vérifie que le tenant existe
+      const t = await q<{ id: string }>(`SELECT id FROM public.tenants WHERE id = $1 LIMIT 1`, [tenantId]);
+      if (!t.length) return res.status(400).json({ error: "unknown_tenant", tenant_id: tenantId });
 
-      // 2) Normalisation & contrôle des champs
       const email = normalizeEmail(req.body?.email);
       if (!email) return res.status(400).json({ error: "missing_email" });
 
@@ -95,20 +85,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const enabled = boolOrDefault(req.body?.enabled, true);
 
       const passwordInput = String(req.body?.password ?? "").trim();
-      const plain =
-        passwordInput.length >= 6 ? passwordInput : Math.random().toString(36).slice(2, 10);
+      const plain = passwordInput.length >= 6 ? passwordInput : Math.random().toString(36).slice(2, 10);
       const password_hash = await bcrypt.hash(plain, SALT_ROUNDS);
 
-      // 3) Upsert en 2 temps (pas besoin d'un index unique)
       try {
         const existing = await q<{ id: string }>(
-          `SELECT id
-             FROM public.members
-            WHERE tenant_id = $1 AND email = LOWER($2)
-            LIMIT 1`,
+          `SELECT id FROM public.members WHERE tenant_id = $1 AND email = LOWER($2) LIMIT 1`,
           [tenantId, email]
         );
-
         if (existing.length) {
           await q(
             `UPDATE public.members
@@ -125,14 +109,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       } catch (e: any) {
         console.error("DML members failed:", e?.message || e);
-        return res.status(400).json({
-          error: "dml_failed",
-          detail: String(e?.message || e),
-          code: (e && (e.code || e.sqlState)) || undefined,
-        });
+        return res.status(400).json({ error: "dml_failed", detail: String(e?.message || e) });
       }
 
-      // 4) Relit la ligne
       const reread = await q<MemberRow>(
         `SELECT id, tenant_id, email, name, role, enabled, created_at
            FROM public.members
@@ -153,7 +132,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const payload: any = { ...row };
-      if (fromAdmin) payload.password = plain; // renvoyé UNIQUEMENT en mode admin
+      if (fromAdmin) payload.password = plain;
       return res.status(201).json(payload);
     }
 

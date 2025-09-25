@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { setCors as setCorsOVE, handleOptions as handleOptionsOVE } from '../_utils/corsOVE';
-import { q } from '../_utils/dbOVE';
-import { requireJwt } from '../_utils/jwtOVE';
+import { setCorsOVE as setCors, handleOptionsOVE as handleOptions } from '../_utils/corsOVE';
+import { qOVE as q } from '../_utils/dbOVE';
+import { requireJwtOVE as requireJwt } from '../_utils/jwtOVE';
 
 type Product = {
   id: string;
@@ -14,14 +14,11 @@ type Product = {
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Préflight CORS
-  if (req.method === 'OPTIONS') return handleOptionsOVE(req, res);
-  setCorsOVE(req, res);
+  if (req.method === 'OPTIONS') return handleOptions(req, res);
+  setCors(req, res);
 
   try {
-    if (req.method !== 'GET') {
-      return res.status(405).json({ error: 'method_not_allowed' });
-    }
+    if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
 
     // JWT obligatoire
     const user = requireJwt(req.headers.authorization);
@@ -41,9 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let i = 2;
 
     if (qParam) {
-      conds.push(
-        `(name ILIKE $${i} OR sku ILIKE $${i} OR COALESCE(description,'') ILIKE $${i})`
-      );
+      conds.push(`(name ILIKE $${i} OR sku ILIKE $${i} OR COALESCE(description,'') ILIKE $${i})`);
       vals.push(`%${qParam}%`);
       i++;
     }
@@ -53,7 +48,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       i++;
     }
 
-    // Requêtes (items + total) en parallèle
+    // Requêtes (items + total)
     const [items, countRows] = await Promise.all([
       q<Product>(
         `SELECT id, sku, name, description, price_cents, category, image_url
@@ -73,12 +68,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const total = Number(countRows[0]?.count ?? 0);
 
-    return res.status(200).json({
-      page,
-      pageSize: size,
-      total,
-      items,
-    });
+    return res.status(200).json({ page, pageSize: size, total, items });
   } catch (e: any) {
     console.error('GET /api/products error:', e);
     const status = e?.message === 'unauthorized' ? 401 : 500;
