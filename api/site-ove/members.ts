@@ -1,4 +1,4 @@
-// /api/site-ove/members.ts (Neon + JWT OVE, avec qOVE = sql tag)
+// /api/site-ove/members.ts  (Neon + JWT OVE)
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { qOVE as q } from "../_utils/dbOVE";
 import {
@@ -19,7 +19,7 @@ type MemberRow = {
 };
 
 const SALT_ROUNDS = 10;
-const ALLOWED_ROLES = new Set(["client", "admin", "demo"] as const);
+const ALLOWED_ROLES = new Set(["client", "admin", "demo"]);
 
 const normalizeEmail = (v: unknown) => String(v ?? "").trim().toLowerCase();
 function boolOrDefault(v: unknown, d = true) {
@@ -37,7 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(req, res);
 
   try {
-    // accepte OVE_ADMIN_API_KEY ou ADMIN_API_KEY
+    // Clé admin (header ou query). Préférence à OVE_ADMIN_API_KEY mais fallback ADMIN_API_KEY.
     const adminKey = (process.env.OVE_ADMIN_API_KEY || process.env.ADMIN_API_KEY || "").trim();
     const h = req.headers["x-admin-key"];
     const incomingHeader = Array.isArray(h) ? (h[0] ?? "").trim() : String(h ?? "").trim();
@@ -74,7 +74,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         tenantId = u.tenant_id;
       }
 
-      // Vérifie le tenant
+      // Vérifie l'existence du tenant
       const t = await q<{ id: string }>`
         SELECT id FROM public.tenants WHERE id = ${tenantId} LIMIT 1
       `;
@@ -85,7 +85,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const name = String(req.body?.name ?? "").trim().slice(0, 200);
       const roleRaw = String(req.body?.role ?? "client").trim().toLowerCase();
-      const role = (ALLOWED_ROLES.has(roleRaw as any) ? roleRaw : "client") as MemberRow["role"];
+      const role = (ALLOWED_ROLES.has(roleRaw) ? roleRaw : "client") as MemberRow["role"];
       const enabled = boolOrDefault(req.body?.enabled, true);
 
       const passwordInput = String(req.body?.password ?? "").trim();
@@ -94,9 +94,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const password_hash = await bcrypt.hash(plain, SALT_ROUNDS);
 
       try {
+        // existe ?
         const existing = await q<{ id: string }>`
           SELECT id FROM public.members
-          WHERE tenant_id = ${tenantId} AND email = LOWER(${email})
+          WHERE tenant_id = ${tenantId} AND email = LOWER(${email}::text)
           LIMIT 1
         `;
 
@@ -108,12 +109,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                    enabled = ${enabled},
                    password_hash = ${password_hash}
              WHERE tenant_id = ${tenantId}
-               AND email = LOWER(${email})
+               AND email = LOWER(${email}::text)
           `;
         } else {
           await q`
             INSERT INTO public.members (tenant_id, email, name, role, enabled, password_hash)
-            VALUES (${tenantId}, LOWER(${email}), ${name}, ${role}, ${enabled}, ${password_hash})
+            VALUES (${tenantId}, LOWER(${email}::text), ${name}, ${role}, ${enabled}, ${password_hash})
           `;
         }
       } catch (e: any) {
@@ -121,10 +122,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: "dml_failed", detail: String(e?.message || e) });
       }
 
+      // Relit la ligne créée/mise à jour
       const reread = await q<MemberRow>`
         SELECT id, tenant_id, email, name, role, enabled, created_at
         FROM public.members
-        WHERE tenant_id = ${tenantId} AND email = LOWER(${email})
+        WHERE tenant_id = ${tenantId} AND email = LOWER(${email}::text)
         LIMIT 1
       `;
       const row = reread[0];
