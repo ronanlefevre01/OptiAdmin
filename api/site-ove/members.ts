@@ -21,7 +21,6 @@ const ALLOWED_ROLES = new Set(["client", "admin", "demo"]);
 function normalizeEmail(v: unknown) {
   return String(v ?? "").trim().toLowerCase();
 }
-
 function boolOrDefault(v: unknown, d = true) {
   if (typeof v === "boolean") return v;
   if (typeof v === "string") {
@@ -38,8 +37,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(req, res);
 
   try {
-    const adminKey = process.env.ADMIN_API_KEY || "";
-    const fromAdmin = (req.headers["x-admin-key"] as string | undefined) === adminKey;
+    // --- Lecture robuste de la clé admin ---
+    const adminKey = (process.env.ADMIN_API_KEY || "").trim();
+
+    const h = req.headers["x-admin-key"];
+    const incomingHeader = Array.isArray(h) ? (h[0] ?? "").trim() : String(h ?? "").trim();
+    const incomingQuery = String((req.query?.admin_key as string) ?? "").trim();
+    const providedKey = incomingHeader || incomingQuery;
+
+    const fromAdmin = !!adminKey && providedKey === adminKey;
+    const adminKeyWasProvided = !!providedKey;
+
+    // Si une clé est fournie mais ne correspond pas → 401 explicite
+    if (adminKeyWasProvided && !fromAdmin) {
+      return res.status(401).json({ error: "bad_admin_key" });
+    }
 
     // --------- GET: liste des membres du tenant ----------
     if (req.method === "GET") {
@@ -49,7 +61,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           (req.query.tenant_id as string | undefined)?.trim() ||
           process.env.OVE_TENANT_ID ||
           "";
-
         if (!tenantId) return res.status(400).json({ error: "missing_tenant_id" });
 
         const { rows } = await q<MemberRow>(
@@ -82,10 +93,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       let requesterRole: string | undefined;
 
       if (fromAdmin) {
-        tenantId =
-          (req.body && req.body.tenant_id) ||
-          process.env.OVE_TENANT_ID ||
-          "";
+        tenantId = (req.body?.tenant_id as string) || process.env.OVE_TENANT_ID || "";
         if (!tenantId) return res.status(400).json({ error: "missing_tenant_id" });
       } else {
         const u = requireJwt(req.headers.authorization);
@@ -119,7 +127,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       );
 
       const payload: any = rows[0];
-      if (fromAdmin) payload.password = plain; // renvoie le mot de passe en clair UNIQUEMENT en mode admin
+      if (fromAdmin) payload.password = plain; // mot de passe en clair UNIQUEMENT en mode admin
       return res.status(201).json(payload);
     }
 
