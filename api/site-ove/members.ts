@@ -86,50 +86,71 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // --------- POST: créer/mettre à jour un membre ----------
-    if (req.method === "POST") {
-      // - Soit Admin (X-Admin-Key) : tenant_id dans body ou fallback env
-      // - Soit client JWT (idéalement role=admin)
-      let tenantId = "";
-      let requesterRole: string | undefined;
+if (req.method === "POST") {
+  let tenantId = "";
+  let requesterRole: string | undefined;
 
-      if (fromAdmin) {
-        tenantId = (req.body?.tenant_id as string) || process.env.OVE_TENANT_ID || "";
-        if (!tenantId) return res.status(400).json({ error: "missing_tenant_id" });
-      } else {
-        const u = requireJwt(req.headers.authorization);
-        tenantId = u.tenant_id;
-        requesterRole = u.role;
-        // Si tu veux restreindre : if (requesterRole !== 'admin') return res.status(403).json({ error: 'forbidden' });
-      }
+  if (fromAdmin) {
+    tenantId = (req.body?.tenant_id as string) || process.env.OVE_TENANT_ID || "";
+    if (!tenantId) return res.status(400).json({ error: "missing_tenant_id" });
+  } else {
+    const u = requireJwt(req.headers.authorization);
+    tenantId = u.tenant_id;
+    requesterRole = u.role;
+    // if (requesterRole !== 'admin') return res.status(403).json({ error: 'forbidden' });
+  }
 
-      const email = normalizeEmail(req.body?.email);
-      if (!email) return res.status(400).json({ error: "missing_email" });
+  const email = normalizeEmail(req.body?.email);
+  if (!email) return res.status(400).json({ error: "missing_email" });
 
-      const name = String(req.body?.name ?? "").trim().slice(0, 200);
-      const roleRaw = String(req.body?.role ?? "client").trim().toLowerCase();
-      const role = (ALLOWED_ROLES.has(roleRaw) ? roleRaw : "client") as MemberRow["role"];
-      const enabled = boolOrDefault(req.body?.enabled, true);
+  const name = String(req.body?.name ?? "").trim().slice(0, 200);
+  const roleRaw = String(req.body?.role ?? "client").trim().toLowerCase();
+  const role = (ALLOWED_ROLES.has(roleRaw) ? roleRaw : "client") as MemberRow["role"];
+  const enabled = boolOrDefault(req.body?.enabled, true);
 
-      const passwordInput = String(req.body?.password ?? "").trim();
-      const plain =
-        passwordInput.length >= 6 ? passwordInput : Math.random().toString(36).slice(2, 10);
-      const password_hash = await bcrypt.hash(plain, SALT_ROUNDS);
+  const passwordInput = String(req.body?.password ?? "").trim();
+  const plain =
+    passwordInput.length >= 6 ? passwordInput : Math.random().toString(36).slice(2, 10);
+  const password_hash = await bcrypt.hash(plain, SALT_ROUNDS);
 
-      const { rows } = await q<MemberRow>(
-        `INSERT INTO members (tenant_id, email, name, role, enabled, password_hash)
-         VALUES ($1, LOWER($2), $3, $4, $5, $6)
-         ON CONFLICT (tenant_id, email)
-         DO UPDATE SET name = EXCLUDED.name,
-                       role = EXCLUDED.role,
-                       enabled = EXCLUDED.enabled
-         RETURNING id, tenant_id, email, name, role, enabled, created_at`,
-        [tenantId, email, name, role, enabled, password_hash]
-      );
+  // 1) upsert
+  const upsert = await q<MemberRow>(
+    `INSERT INTO members (tenant_id, email, name, role, enabled, password_hash)
+     VALUES ($1, LOWER($2), $3, $4, $5, $6)
+     ON CONFLICT (tenant_id, email)
+     DO UPDATE SET name = EXCLUDED.name,
+                   role = EXCLUDED.role,
+                   enabled = EXCLUDED.enabled
+     RETURNING id, tenant_id, email, name, role, enabled, created_at`,
+    [tenantId, email, name, role, enabled, password_hash]
+  );
 
-      const payload: any = rows[0];
-      if (fromAdmin) payload.password = plain; // mot de passe en clair UNIQUEMENT en mode admin
-      return res.status(201).json(payload);
-    }
+  let row = upsert.rows?.[0];
+
+  // 2) fallback si RETURNING ne renvoie rien : on relit la ligne
+  if (!row) {
+    const reread = await q<MemberRow>(
+      `SELECT id, tenant_id, email, name, role, enabled, created_at
+         FROM members
+        WHERE tenant_id = $1 AND email = LOWER($2)
+        LIMIT 1`,
+      [tenantId, email]
+    );
+    row = reread.rows?.[0];
+  }
+
+  if (!row) {
+    // On a vraiment rien récupéré, on remonte une erreur explicite
+    return res.status(500).json({ error: "insert_returning_empty" });
+  }
+
+  // En mode admin, on renvoie le mot de passe en clair
+  const payload: any = { ...row };
+  if (fromAdmin) payload.password = plain;
+
+  return res.status(201).json(payload);
+}
+
 
     return res.status(405).json({ error: "method_not_allowed" });
   } catch (err: any) {
