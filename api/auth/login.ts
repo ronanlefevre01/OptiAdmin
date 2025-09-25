@@ -1,33 +1,29 @@
-// /api/auth/login.ts
-import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { jsonbinGet } from "../_utils/jsonbin";
-import bcrypt from "bcryptjs";
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { setCors, handleOptions } from '../_utils/cors';
+import { q } from '../_utils/db';
+import { signJwt } from '../_utils/jwt';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  if (req.method === "OPTIONS") return res.status(204).end();
-
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  if (req.method === 'OPTIONS') return handleOptions(req, res);
+  setCors(req, res);
 
   try {
+    if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
     const { email, password } = req.body || {};
-    if (!email || !password) return res.status(400).json({ error: "email et password requis" });
+    if (!email) return res.status(400).json({ error: 'missing_email' });
 
-    const store = await jsonbinGet();
-    const members = Array.isArray(store.members) ? store.members : [];
+    // 🔐 DEV simplifié : cherche le membre par email, ignore password
+    const { rows } = await q<{ id: string; tenant_id: string }>(
+      `SELECT id, tenant_id FROM members WHERE email = $1 LIMIT 1`,
+      [email]
+    );
+    if (!rows.length) return res.status(401).json({ error: 'invalid_credentials' });
 
-    const m = members.find((x: any) => x.email?.toLowerCase() === String(email).toLowerCase());
-    if (!m || !m.enabled) return res.status(401).json({ error: "identifiants invalides" });
+    const member = rows[0];
+    const token = signJwt({ tenant_id: member.tenant_id, member_id: member.id });
 
-    const ok = await bcrypt.compare(String(password), m.password_hash || "");
-    if (!ok) return res.status(401).json({ error: "identifiants invalides" });
-
-    // token minimal (démo) : renvoie role/email
-    return res.status(200).json({ email: m.email, role: m.role, name: m.name || "" });
-  } catch (err: any) {
-    console.error("login error:", err?.message || err);
-    return res.status(500).json({ error: "server_error", detail: String(err?.message || err) });
+    return res.status(200).json({ token });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || 'server_error' });
   }
 }
