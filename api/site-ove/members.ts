@@ -1,4 +1,4 @@
-// /api/site-ove/members.ts  (Neon + JWT OVE)
+// /api/site-ove/members.ts  (Neon + JWT OVE, sans LOWER()/::text)
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { qOVE as q } from "../_utils/dbOVE";
 import {
@@ -37,7 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(req, res);
 
   try {
-    // Clé admin (header ou query). Préférence à OVE_ADMIN_API_KEY mais fallback ADMIN_API_KEY.
+    // Clé admin (header ou query)
     const adminKey = (process.env.OVE_ADMIN_API_KEY || process.env.ADMIN_API_KEY || "").trim();
     const h = req.headers["x-admin-key"];
     const incomingHeader = Array.isArray(h) ? (h[0] ?? "").trim() : String(h ?? "").trim();
@@ -97,7 +97,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // existe ?
         const existing = await q<{ id: string }>`
           SELECT id FROM public.members
-          WHERE tenant_id = ${tenantId} AND email = LOWER(${email}::text)
+          WHERE tenant_id = ${tenantId} AND email = ${email}
           LIMIT 1
         `;
 
@@ -109,12 +109,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                    enabled = ${enabled},
                    password_hash = ${password_hash}
              WHERE tenant_id = ${tenantId}
-               AND email = LOWER(${email}::text)
+               AND email = ${email}
           `;
         } else {
           await q`
             INSERT INTO public.members (tenant_id, email, name, role, enabled, password_hash)
-            VALUES (${tenantId}, LOWER(${email}::text), ${name}, ${role}, ${enabled}, ${password_hash})
+            VALUES (${tenantId}, ${email}, ${name}, ${role}, ${enabled}, ${password_hash})
           `;
         }
       } catch (e: any) {
@@ -126,7 +126,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const reread = await q<MemberRow>`
         SELECT id, tenant_id, email, name, role, enabled, created_at
         FROM public.members
-        WHERE tenant_id = ${tenantId} AND email = LOWER(${email}::text)
+        WHERE tenant_id = ${tenantId} AND email = ${email}
         LIMIT 1
       `;
       const row = reread[0];
