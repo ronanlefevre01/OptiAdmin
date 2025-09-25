@@ -40,10 +40,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         i++;
       }
 
-      const [itemsRes, countRes] = await Promise.all([
+      const [items, countRows] = await Promise.all([
         q<TicketRow>(
           `SELECT id, subject, status, order_id, created_at
-             FROM tickets
+             FROM public.tickets
             WHERE ${conds.join(' AND ')}
             ORDER BY created_at DESC
             LIMIT $${i} OFFSET $${i + 1}`,
@@ -51,19 +51,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ),
         q<{ count: string }>(
           `SELECT COUNT(*)::text AS count
-             FROM tickets
+             FROM public.tickets
             WHERE ${conds.join(' AND ')}`,
           vals
         ),
       ]);
 
-      const total = Number(countRes.rows?.[0]?.count ?? 0);
+      const total = Number(countRows[0]?.count ?? 0);
 
       return res.status(200).json({
         page,
         pageSize: size,
         total,
-        items: itemsRes.rows,
+        items,
       });
     }
 
@@ -88,29 +88,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Si un orderId est fourni, vérifier qu'il appartient au même tenant & membre
       if (orderId) {
         const exists = await q<{ id: string }>(
-          `SELECT id FROM orders WHERE id = $1 AND tenant_id = $2 AND member_id = $3 LIMIT 1`,
+          `SELECT id
+             FROM public.orders
+            WHERE id = $1 AND tenant_id = $2 AND member_id = $3
+            LIMIT 1`,
           [orderId, user.tenant_id, user.member_id]
         );
-        if (!exists.rows.length) {
+        if (!exists.length) {
           return res.status(404).json({ error: 'order_not_found' });
         }
       }
 
       // Créer le ticket
       const created = await q<{ id: string }>(
-        `INSERT INTO tickets (tenant_id, member_id, order_id, subject, status)
+        `INSERT INTO public.tickets (tenant_id, member_id, order_id, subject, status)
          VALUES ($1, $2, $3, $4, 'open')
          RETURNING id`,
         [user.tenant_id, user.member_id, orderId || null, cleanSubject]
       );
 
-      const ticketId = created.rows[0].id;
+      const ticketId = created[0]?.id;
 
       // (Optionnel) insérer le premier message si tu as une table tickets_messages
-      // Décommente si la table existe :
-      //
       // await q(
-      //   `INSERT INTO tickets_messages (ticket_id, member_id, author_role, body)
+      //   `INSERT INTO public.tickets_messages (ticket_id, member_id, author_role, body)
       //     VALUES ($1, $2, 'client', $3)`,
       //   [ticketId, user.member_id, cleanMessage]
       // );

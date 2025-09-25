@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { setCors, handleOptions } from '../_utils/cors';
-import { q } from '../_utils/db';
-import { requireJwt } from '../_utils/jwt';
+import { setCors as setCorsOVE, handleOptions as handleOptionsOVE } from '../_utils/corsOVE';
+import { q } from '../_utils/dbOVE';
+import { requireJwt } from '../_utils/jwtOVE';
 
 type Product = {
   id: string;
@@ -15,9 +15,8 @@ type Product = {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Préflight CORS
-  if (req.method === 'OPTIONS') return handleOptions(req, res);
-
-  setCors(req, res);
+  if (req.method === 'OPTIONS') return handleOptionsOVE(req, res);
+  setCorsOVE(req, res);
 
   try {
     if (req.method !== 'GET') {
@@ -33,10 +32,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const cat = rawCat && rawCat.toLowerCase() !== 'all' ? rawCat : '';
 
     const page = Math.max(parseInt(String(req.query.page ?? '1'), 10) || 1, 1);
-    const size = Math.min(
-      Math.max(parseInt(String(req.query.pageSize ?? '24'), 10) || 24, 1),
-      100
-    );
+    const size = Math.min(Math.max(parseInt(String(req.query.pageSize ?? '24'), 10) || 24, 1), 100);
     const offset = (page - 1) * size;
 
     // Conditions dynamiques
@@ -58,10 +54,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Requêtes (items + total) en parallèle
-    const [itemsRes, countRes] = await Promise.all([
+    const [items, countRows] = await Promise.all([
       q<Product>(
         `SELECT id, sku, name, description, price_cents, category, image_url
-           FROM products
+           FROM public.products
           WHERE ${conds.join(' AND ')}
           ORDER BY name ASC
           LIMIT $${i} OFFSET $${i + 1}`,
@@ -69,19 +65,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ),
       q<{ count: string }>(
         `SELECT COUNT(*)::text AS count
-           FROM products
+           FROM public.products
           WHERE ${conds.join(' AND ')}`,
         vals
       ),
     ]);
 
-    const total = Number(countRes.rows?.[0]?.count ?? 0);
+    const total = Number(countRows[0]?.count ?? 0);
 
     return res.status(200).json({
       page,
       pageSize: size,
       total,
-      items: itemsRes.rows,
+      items,
     });
   } catch (e: any) {
     console.error('GET /api/products error:', e);

@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { setCors, handleOptions } from '../_utils/cors';
-import { q } from '../_utils/db';
-import { requireJwt } from '../_utils/jwt';
+import { setCorsOVE as setCors, handleOptionsOVE as handleOptions } from '../_utils/corsOVE';
+import { q } from '../_utils/dbOVE';
+import { requireJwt } from '../_utils/jwtOVE';
 
 type OrderRow = {
   id: string;
@@ -25,7 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(req, res);
 
   try {
-    // JWT requis
+    // JWT requis (profil OVE)
     const user = requireJwt(req.headers.authorization);
 
     // -------------------------
@@ -33,16 +33,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // -------------------------
     if (req.method === 'GET') {
       const page = Math.max(parseInt(String(req.query.page ?? '1'), 10) || 1, 1);
-      const size = Math.min(
-        Math.max(parseInt(String(req.query.pageSize ?? '50'), 10) || 50, 1),
-        100
-      );
+      const size = Math.min(Math.max(parseInt(String(req.query.pageSize ?? '50'), 10) || 50, 1), 100);
       const offset = (page - 1) * size;
 
-      const [itemsRes, countRes] = await Promise.all([
+      const [items, countRows] = await Promise.all([
         q<OrderRow>(
           `SELECT id, number, status, total_cents, created_at
-             FROM orders
+             FROM public.orders
             WHERE tenant_id = $1 AND member_id = $2
             ORDER BY created_at DESC
             LIMIT $3 OFFSET $4`,
@@ -50,20 +47,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ),
         q<{ count: string }>(
           `SELECT COUNT(*)::text AS count
-             FROM orders
+             FROM public.orders
             WHERE tenant_id = $1 AND member_id = $2`,
           [user.tenant_id, user.member_id]
         ),
       ]);
 
-      const total = Number(countRes.rows?.[0]?.count ?? 0);
+      const total = Number(countRows[0]?.count ?? 0);
 
-      return res.status(200).json({
-        page,
-        pageSize: size,
-        total,
-        items: itemsRes.rows,
-      });
+      return res.status(200).json({ page, pageSize: size, total, items });
     }
 
     // -------------------------
@@ -83,11 +75,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ? Math.max(0, Math.trunc(Number(body.shippingCents)))
         : 0;
 
-      if (!items.length) {
-        return res.status(400).json({ error: 'items_required' });
-      }
+      if (!items.length) return res.status(400).json({ error: 'items_required' });
 
-      // petite validation des items + total
+      // Validation des items + total
       let itemsTotal = 0;
       for (const it of items) {
         const qty = Math.max(0, Math.trunc(Number(it.qty ?? 0)));
@@ -97,18 +87,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       const total = itemsTotal + shippingCents;
 
-      // créer la commande
+      // Créer la commande
       const created = await q<{ id: string }>(
-        `INSERT INTO orders (tenant_id, member_id, number, status, total_cents, notes)
+        `INSERT INTO public.orders (tenant_id, member_id, number, status, total_cents, notes)
          VALUES ($1, $2, concat('O', extract(epoch from now())::bigint), 'pending', $3, $4)
          RETURNING id`,
         [user.tenant_id, user.member_id, total, notes]
       );
-      const orderId = created.rows[0].id;
 
-      // (optionnel) si tu as une table orders_items, insère-les ici.
-      // Exemple (à activer si la table existe avec ces colonnes) :
-      //
+      const orderId = created[0]?.id;
+
+      // (optionnel) si tu as une table public.orders_items, insère-les ici :
       // const validItems = items
       //   .map(it => ({
       //     product_id: it.productId ?? null,
@@ -119,15 +108,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       //   }))
       //   .filter(it => it.qty > 0 && it.unit_price_cents > 0);
       //
-      // if (validItems.length) {
-      //   // selon ton driver Neon, tu peux insérer en boucle ou via UNNEST
-      //   for (const it of validItems) {
-      //     await q(
-      //       `INSERT INTO orders_items (order_id, product_id, sku, name, qty, unit_price_cents)
-      //         VALUES ($1, $2, $3, $4, $5, $6)`,
-      //       [orderId, it.product_id, it.sku, it.name, it.qty, it.unit_price_cents]
-      //     );
-      //   }
+      // for (const it of validItems) {
+      //   await q(
+      //     `INSERT INTO public.orders_items (order_id, product_id, sku, name, qty, unit_price_cents)
+      //      VALUES ($1, $2, $3, $4, $5, $6)`,
+      //     [orderId, it.product_id, it.sku, it.name, it.qty, it.unit_price_cents]
+      //   );
       // }
 
       return res.status(201).json({ id: orderId });
