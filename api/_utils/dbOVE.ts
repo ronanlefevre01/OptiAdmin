@@ -1,14 +1,18 @@
-import { neon, neonConfig } from '@neondatabase/serverless';
-neonConfig.fetchConnectionCache = true;
+// api/_utils/dbOVE.ts
+import { neon } from '@neondatabase/serverless';
 
-const OVE_DATABASE_URL = process.env.OVE_DATABASE_URL;
-if (!OVE_DATABASE_URL) throw new Error('Missing OVE_DATABASE_URL');
+const connStr =
+  process.env.DATABASE_URL_OVE || process.env.DATABASE_URL || '';
 
-const sql = neon(OVE_DATABASE_URL);
+if (!connStr) {
+  throw new Error('Missing DATABASE_URL_OVE or DATABASE_URL');
+}
 
-// Utilisation identique à ton q() : text + params
-export async function qOVE<T = any>(text: string, params: any[] = []) {
-  // @ts-ignore (neon accepte (text, params))
-  const rows = await sql(text, params);
-  return rows as T[];
+// Client Neon spécifique OVE
+const sqlOVE = neon(connStr);
+
+// Petit helper: requête SQL paramétrée ($1, $2, …) -> rows
+export async function qOVE<T = any>(text: string, params: any[] = []): Promise<T[]> {
+  const res = await sqlOVE.query<T>(text, params); // <= IMPORTANT: .query(...)
+  return (res.rows as unknown) as T[];
 }
