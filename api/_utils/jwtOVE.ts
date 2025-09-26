@@ -11,29 +11,25 @@ export type OVEJwtPayload = {
 
 function getOVESecret(): string {
   const secret = process.env.OVE_JWT_SECRET;
-  if (!secret) {
-    // même message qu’on remonte côté API pour bien diagnostiquer
-    throw new Error("ove_jwt_secret_missing");
-  }
+  if (!secret) throw new Error("ove_jwt_secret_missing");
   return secret;
 }
 
 /** Signe un JWT avec OVE_JWT_SECRET */
 export function signJwtOVE(
   payload: OVEJwtPayload,
-  expiresIn: string | number = "7d"
+  options?: SignOptions
 ): string {
-  const options: SignOptions = { expiresIn };
-  return jwt.sign(payload, getOVESecret(), options);
+  const opts: SignOptions = { expiresIn: "7d", ...(options || {}) };
+  return jwt.sign(payload, getOVESecret(), opts);
 }
 
-/** Vérifie le JWT (header Authorization: Bearer <token>) et renvoie son payload */
+/** Vérifie le JWT (Authorization: Bearer <token>) et renvoie son payload */
 export function requireJwtOVE(authorization?: string): OVEJwtPayload {
   const auth = (authorization || "").trim();
   const [scheme, token] = auth.split(" ");
-  if (!token || scheme.toLowerCase() !== "bearer") {
-    throw new Error("unauthorized");
-  }
+  if (!token || scheme.toLowerCase() !== "bearer") throw new Error("unauthorized");
+
   const decoded = jwt.verify(token, getOVESecret());
   if (typeof decoded === "string") throw new Error("invalid_token");
 

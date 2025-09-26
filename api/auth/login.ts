@@ -59,10 +59,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!ok) return res.status(401).json({ error: 'invalid_credentials' });
 
     // 4) Signe le JWT avec OVE_JWT_SECRET (via util)
-    const token = signJwtOVE(
-      { member_id: member.id, tenant_id: member.tenant_id, role: member.role },
-      '7d'
-    );
+    const token = signJwtOVE({
+  member_id: member.id,
+  tenant_id: member.tenant_id,
+  role: member.role,
+});
 
     // (Optionnel) Cookie HttpOnly :
     // res.setHeader('Set-Cookie', `OVE_JWT=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${60*60*24*7}`);
