@@ -1,2 +1,34 @@
-// shim de compatibilité : expose setCors & handleOptions depuis corsOVE
-export { setCorsOVE as setCors, handleOptionsOVE as handleOptions } from "./corsOVE";
+// api/_utils/cors.ts
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+
+const allowed = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
+function pickOrigin(req: VercelRequest) {
+  const o = (req.headers.origin as string) || '';
+  return allowed.includes(o) ? o : ''; // pas d'entête si non autorisé
+}
+
+export function setCors(req: VercelRequest, res: VercelResponse) {
+  const origin = pickOrigin(req);
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    // ajoute ici ce dont tes requêtes ont besoin :
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Authorization, X-Admin-Key'
+    );
+    res.setHeader(
+      'Access-Control-Allow-Methods',
+      'GET,POST,PUT,PATCH,DELETE,OPTIONS'
+    );
+    res.setHeader('Vary', 'Origin'); // pour le cache/CDN
+  }
+}
+
+export function handleOptions(req: VercelRequest, res: VercelResponse) {
+  setCors(req, res);
+  res.status(204).end();
+}
