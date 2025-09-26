@@ -19,6 +19,27 @@ type Order = {
   created_at: string;
 };
 
+/* ====== CONFIG API (clé admin + tenant + éventuel JWT) ====== */
+const ADMIN_KEY = import.meta.env.VITE_OVE_ADMIN_KEY || "";
+const TENANT_ID = import.meta.env.VITE_OVE_TENANT_ID || "";
+
+/** Construit l’URL d’API en ajoutant admin_key (& tenant_id) si dispo */
+function withAdminQuery(path: string) {
+  if (!ADMIN_KEY) return path;
+  const sep = path.includes("?") ? "&" : "?";
+  const qTenant = TENANT_ID ? `&tenant_id=${encodeURIComponent(TENANT_ID)}` : "";
+  return `${path}${sep}admin_key=${encodeURIComponent(ADMIN_KEY)}${qTenant}`;
+}
+
+/** Ajoute un header Authorization si un token est présent en localStorage */
+function authHeaders() {
+  const token =
+    localStorage.getItem("OVE_TOKEN") ||
+    localStorage.getItem("token") ||
+    "";
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export default function SiteOVEAdmin() {
   const [tab, setTab] = React.useState<"membres" | "commandes">("membres");
 
@@ -81,7 +102,9 @@ function MembersPanel() {
     (async () => {
       setLoading(true);
       try {
-        const res = await fetch("/api/site-ove/members");
+        const res = await fetch(withAdminQuery("/api/site-ove/members"), {
+          headers: { ...authHeaders() },
+        });
         const data = await res.json();
         setMembers(Array.isArray(data) ? data : data.items || []);
       } catch {
@@ -98,31 +121,30 @@ function MembersPanel() {
     const email = form.email.trim();
     if (!email) return;
 
-    // si le champ est vide -> générer un mot de passe
     let password = form.password.trim();
     if (!password) password = randPassword();
 
-    const payload = {
+    const payload: any = {
       email,
       name: form.name.trim(),
       role: form.role,
-      password, // envoyé en clair à l'API; l'API le HASH avant sauvegarde
+      password,
     };
 
-    const res = await fetch("/api/site-ove/members", {
+    // en mode admin_key l’API attend tenant_id dans le body
+    if (ADMIN_KEY && TENANT_ID) payload.tenant_id = TENANT_ID;
+
+    const res = await fetch(withAdminQuery("/api/site-ove/members"), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify(payload),
     });
 
     if (res.ok) {
       const created = await res.json();
       setMembers((prev) => [created, ...prev]);
-      // on vide sauf le role
       setForm({ email: "", name: "", role: form.role, password: "" });
-
-      // ⚠️ Afficher le MDP une seule fois
-      alert(`Membre créé.\n\nEmail: ${payload.email}\nMot de passe: ${password}\n\nNote: gardez-le en lieu sûr.`);
+      alert(`Membre créé.\n\nEmail: ${email}\nMot de passe: ${password}\n\nNote: gardez-le en lieu sûr.`);
     } else {
       const t = await res.text();
       alert("Erreur création membre\n" + t);
@@ -130,13 +152,16 @@ function MembersPanel() {
   }
 
   async function toggleMember(id: string, enabled: boolean) {
-    const res = await fetch(`/api/site-ove/members/${id}`, {
+    // (uniquement si /api/site-ove/members/[id] PATCH est implémenté côté API)
+    const res = await fetch(withAdminQuery(`/api/site-ove/members/${id}`), {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ enabled }),
     });
     if (res.ok) {
       setMembers((prev) => prev.map((m) => (m.id === id ? { ...m, enabled } : m)));
+    } else {
+      // silencieux si la route n’existe pas
     }
   }
 
@@ -237,7 +262,9 @@ function OrdersPanel() {
     (async () => {
       setLoading(true);
       try {
-        const res = await fetch("/api/site-ove/orders");
+        const res = await fetch(withAdminQuery("/api/site-ove/orders"), {
+          headers: { ...authHeaders() },
+        });
         const data = await res.json();
         setOrders(Array.isArray(data) ? data : data.items || []);
       } catch {
@@ -249,9 +276,9 @@ function OrdersPanel() {
   }, []);
 
   async function updateStatus(id: string, status: Order["status"]) {
-    const res = await fetch(`/api/site-ove/orders/${id}`, {
+    const res = await fetch(withAdminQuery(`/api/site-ove/orders/${id}`), {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ status }),
     });
     if (res.ok) {
