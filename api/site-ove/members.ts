@@ -95,41 +95,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       try {
         // existe ?
-        const existing = await q<{ id: string }>`
-          SELECT id FROM public.members
-          WHERE tenant_id = ${tenantId} AND email = ${email}
-          LIMIT 1
-        `;
+        const ex = await q<{ exists: boolean }>(
+  `SELECT EXISTS(
+     SELECT 1 FROM public.members
+     WHERE tenant_id = $1 AND email = LOWER($2)
+   ) AS exists`,
+  [tenantId, email]
+);
 
-        if (existing.length) {
-          await q`
-            UPDATE public.members
-               SET name = ${name},
-                   role = ${role},
-                   enabled = ${enabled},
-                   password_hash = ${password_hash}
-             WHERE tenant_id = ${tenantId}
-               AND email = ${email}
-          `;
-        } else {
-          await q`
-            INSERT INTO public.members (tenant_id, email, name, role, enabled, password_hash)
-            VALUES (${tenantId}, ${email}, ${name}, ${role}, ${enabled}, ${password_hash})
-          `;
-        }
+if (ex[0]?.exists) {
+  await q(
+    `UPDATE public.members
+        SET name=$3, role=$4, enabled=$5, password_hash=$6
+      WHERE tenant_id=$1 AND email=LOWER($2)`,
+    [tenantId, email, name, role, enabled, password_hash]
+  );
+} else {
+  await q(
+    `INSERT INTO public.members (tenant_id, email, name, role, enabled, password_hash)
+     VALUES ($1, LOWER($2), $3, $4, $5, $6)`,
+    [tenantId, email, name, role, enabled, password_hash]
+  );
+}
       } catch (e: any) {
         console.error("DML members failed:", e?.message || e);
         return res.status(400).json({ error: "dml_failed", detail: String(e?.message || e) });
       }
 
       // Relit la ligne créée/mise à jour
-      const reread = await q<MemberRow>`
-        SELECT id, tenant_id, email, name, role, enabled, created_at
-        FROM public.members
-        WHERE tenant_id = ${tenantId} AND email = ${email}
-        LIMIT 1
-      `;
-      const row = reread[0];
+      const reread = await q<MemberRow>(
+  `SELECT id, tenant_id, email, name, role, enabled, created_at
+     FROM public.members
+    WHERE tenant_id = $1 AND email = LOWER($2)`,
+  [tenantId, email]
+);
+const row = reread[0];
       if (!row) {
         const cnt = await q<{ n: string }>`
           SELECT count(*)::text AS n FROM public.members WHERE tenant_id = ${tenantId}
