@@ -1,4 +1,4 @@
-// /api/site-ove/members.ts  (Neon + JWT OVE, sans LOWER()/::text)
+// /api/site-ove/members.ts (Neon + JWT OVE)
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { qOVE as q } from "../_utils/dbOVE";
 import {
@@ -37,14 +37,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(req, res);
 
   try {
-    // Clé admin (header ou query)
+    // On accepte OVE_ADMIN_API_KEY (prioritaire) ou ADMIN_API_KEY
     const adminKey = (process.env.OVE_ADMIN_API_KEY || process.env.ADMIN_API_KEY || "").trim();
     const h = req.headers["x-admin-key"];
     const incomingHeader = Array.isArray(h) ? (h[0] ?? "").trim() : String(h ?? "").trim();
     const incomingQuery = String((req.query?.admin_key as string) ?? "").trim();
     const providedKey = incomingHeader || incomingQuery;
     const fromAdmin = !!adminKey && providedKey === adminKey;
-    if (providedKey && !fromAdmin) return res.status(401).json({ error: "bad_admin_key" });
+    const adminKeyWasProvided = !!providedKey;
+    if (adminKeyWasProvided && !fromAdmin)
+      return res.status(401).json({ error: "bad_admin_key" });
 
     // ---------- GET ----------
     if (req.method === "GET") {
@@ -56,9 +58,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const rows = await q<MemberRow>`
         SELECT id, tenant_id, email, name, role, enabled, created_at
-        FROM public.members
-        WHERE tenant_id = ${tenantId}
-        ORDER BY created_at DESC
+          FROM public.members
+         WHERE tenant_id = ${tenantId}
+         ORDER BY created_at DESC
       `;
       return res.status(200).json(rows);
     }
@@ -74,7 +76,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         tenantId = u.tenant_id;
       }
 
-      // Vérifie l'existence du tenant
+      // vérifie que le tenant existe
       const t = await q<{ id: string }>`
         SELECT id FROM public.tenants WHERE id = ${tenantId} LIMIT 1
       `;
@@ -90,49 +92,56 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const passwordInput = String(req.body?.password ?? "").trim();
       const plain =
-        passwordInput.length >= 6 ? passwordInput : Math.random().toString(36).slice(2, 10);
+        passwordInput.length >= 6
+          ? passwordInput
+          : Math.random().toString(36).slice(2, 10);
       const password_hash = await bcrypt.hash(plain, SALT_ROUNDS);
 
       try {
-        // existe ?
-        const ex = await q<{ exists: boolean }>(
-  `SELECT EXISTS(
-     SELECT 1 FROM public.members
-     WHERE tenant_id = $1 AND email = LOWER($2)
-   ) AS exists`,
-  [tenantId, email]
-);
+        const existing = await q<{ id: string }>`
+          SELECT id
+            FROM public.members
+           WHERE tenant_id = ${tenantId}
+             AND email = lower(${email})
+           LIMIT 1
+        `;
 
-if (ex[0]?.exists) {
-  await q(
-    `UPDATE public.members
-        SET name=$3, role=$4, enabled=$5, password_hash=$6
-      WHERE tenant_id=$1 AND email=LOWER($2)`,
-    [tenantId, email, name, role, enabled, password_hash]
-  );
-} else {
-  await q(
-    `INSERT INTO public.members (tenant_id, email, name, role, enabled, password_hash)
-     VALUES ($1, LOWER($2), $3, $4, $5, $6)`,
-    [tenantId, email, name, role, enabled, password_hash]
-  );
-}
+        if (existing.length) {
+          await q`
+            UPDATE public.members
+               SET name = ${name},
+                   role = ${role},
+                   enabled = ${enabled},
+                   password_hash = ${password_hash}
+             WHERE tenant_id = ${tenantId}
+               AND email = lower(${email})
+          `;
+        } else {
+          await q`
+            INSERT INTO public.members
+              (tenant_id, email, name, role, enabled, password_hash)
+            VALUES
+              (${tenantId}, lower(${email}), ${name}, ${role}, ${enabled}, ${password_hash})
+          `;
+        }
       } catch (e: any) {
         console.error("DML members failed:", e?.message || e);
         return res.status(400).json({ error: "dml_failed", detail: String(e?.message || e) });
       }
 
-      // Relit la ligne créée/mise à jour
-      const reread = await q<MemberRow>(
-  `SELECT id, tenant_id, email, name, role, enabled, created_at
-     FROM public.members
-    WHERE tenant_id = $1 AND email = LOWER($2)`,
-  [tenantId, email]
-);
-const row = reread[0];
+      const reread = await q<MemberRow>`
+        SELECT id, tenant_id, email, name, role, enabled, created_at
+          FROM public.members
+         WHERE tenant_id = ${tenantId}
+           AND email = lower(${email})
+         LIMIT 1
+      `;
+      const row = reread[0];
       if (!row) {
         const cnt = await q<{ n: string }>`
-          SELECT count(*)::text AS n FROM public.members WHERE tenant_id = ${tenantId}
+          SELECT count(*)::text AS n
+            FROM public.members
+           WHERE tenant_id = ${tenantId}
         `;
         return res.status(500).json({
           error: "insert_or_update_failed",
