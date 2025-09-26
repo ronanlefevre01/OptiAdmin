@@ -10,34 +10,32 @@ if (!URL) {
   throw new Error("OVE_DATABASE_URL (ou DATABASE_URL) manquant");
 }
 
-// Neon v2: "sql" est un tagged-template function, et expose aussi .query(text, params)
+// "sql" est le tagged template de Neon v2, expose aussi .query(text, params)
 const sql = neon(URL);
 
 type Row = Record<string, any>;
 
 /**
- * qOVE : exécute une requête SQL en mode:
- *   - tagged template: qOVE`SELECT * FROM t WHERE id = ${id}`
- *   - texte + params : qOVE("SELECT * FROM t WHERE id = $1", [id])
- * Retourne toujours un tableau de lignes (T[]).
+ * qOVE : exécute en 2 modes
+ *  - tagged template : qOVE`SELECT * FROM t WHERE id = ${id}`
+ *  - texte + params  : qOVE("SELECT * FROM t WHERE id = $1", [id])
+ * Retourne toujours T[].
  */
 export async function qOVE<T extends Row = Row>(
   textOrTpl: string | TemplateStringsArray,
   ...values: any[]
 ): Promise<T[]> {
-  // Mode "tagged template"
+  // Mode tagged template
   if (Array.isArray(textOrTpl) && "raw" in textOrTpl) {
-    const rows = await (sql as any)<T>(textOrTpl as any, ...values);
-    // sql`...` retourne déjà T[]
-    return rows as T[];
+    const rows = await (sql as any)(textOrTpl as any, ...values);
+    return (rows ?? []) as T[]; // cast simple, pas de <T> sur un any
   }
 
-  // Mode "texte + params"
+  // Mode texte + params
   const text = textOrTpl as string;
   const params = (values[0] ?? []) as any[];
-  const res = await (sql as any).query<T>(text, params);
-  // .query() retourne { rows: T[] }
-  return (res?.rows ?? []) as T[];
+  const res = await (sql as any).query(text, params);
+  return ((res && res.rows) || []) as T[];
 }
 
 /** Renvoie une seule ligne (ou null) */
