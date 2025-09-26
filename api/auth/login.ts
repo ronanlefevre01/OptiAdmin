@@ -1,3 +1,4 @@
+// /api/auth/login.ts
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { setCorsOVE as setCors, handleOptionsOVE as handleOptions } from '../_utils/corsOVE';
 import { qOVE as q } from '../_utils/dbOVE';
@@ -35,41 +36,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'missing_fields' });
     }
 
-    // Vérifie le tenant
-    const t = await q<{ id: string }>(
-      `SELECT id FROM public.tenants WHERE id = $1 LIMIT 1`,
-      [tenantId]
-    );
+    // 1) Vérifie le tenant (tagged-template)
+    const t = await q<{ id: string }>`
+      SELECT id FROM public.tenants WHERE id = ${tenantId} LIMIT 1
+    `;
     if (!t.length) return res.status(400).json({ error: 'unknown_tenant' });
 
-    // Récupère le membre
-    const m = await q<Member>(
-      `SELECT id, tenant_id, email, name, role, enabled, password_hash
-         FROM public.members
-        WHERE tenant_id = $1 AND email = LOWER($2) AND enabled = true
-        LIMIT 1`,
-      [tenantId, mail]
-    );
+    // 2) Récupère le membre actif (email déjà en minuscule)
+    const m = await q<Member>`
+      SELECT id, tenant_id, email, name, role, enabled, password_hash
+      FROM public.members
+      WHERE tenant_id = ${tenantId}
+        AND email = ${mail}
+        AND enabled = true
+      LIMIT 1
+    `;
     const member = m[0];
     if (!member) return res.status(401).json({ error: 'invalid_credentials' });
 
+    // 3) Vérifie le mot de passe
     const ok = await bcrypt.compare(pass, member.password_hash);
     if (!ok) return res.status(401).json({ error: 'invalid_credentials' });
 
+    // 4) Signe le JWT
     const secret = process.env.JWT_SECRET;
     if (!secret) return res.status(500).json({ error: 'jwt_secret_missing' });
 
     const token = jwt.sign(
-      {
-        member_id: member.id,
-        tenant_id: member.tenant_id,
-        role: member.role,
-      },
+      { member_id: member.id, tenant_id: member.tenant_id, role: member.role },
       secret,
       { expiresIn: '7d' }
     );
 
-    return res.status(200).json({ token });
+    // (Optionnel) Cookie HttpOnly en plus du retour JSON :
+    // res.setHeader('Set-Cookie', `OVE_JWT=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${60*60*24*7}`);
+
+    return res.status(200).json({
+      token, // côté front, stocke-le sous "OVE_JWT"
+      member: { id: member.id, email: member.email, name: member.name, role: member.role }
+    });
   } catch (e: any) {
     console.error('API /auth/login error:', e);
     return res.status(500).json({ error: e?.message || 'server_error' });
