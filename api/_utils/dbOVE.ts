@@ -1,46 +1,52 @@
 // api/_utils/dbOVE.ts
-import { neon, Client } from '@neondatabase/serverless';
+import { neon } from "@neondatabase/serverless";
 
-const OVE_DB_URL =
+const URL =
   process.env.OVE_DATABASE_URL ||
-  process.env.DATABASE_URL_OVE || // fallback si tu t’es trompé de nom
-  '';
+  process.env.DATABASE_URL ||
+  "";
 
-if (!OVE_DB_URL) {
-  throw new Error('Missing OVE_DATABASE_URL (or DATABASE_URL_OVE) in env vars');
+if (!URL) {
+  throw new Error("OVE_DATABASE_URL (ou DATABASE_URL) manquant");
 }
 
-// Tagged template (neon) — le plus perf
-const sqlTag = neon(OVE_DB_URL);
+// Neon v2: "sql" est un tagged-template function, et expose aussi .query(text, params)
+const sql = neon(URL);
+
+type Row = Record<string, any>;
 
 /**
- * q : accepte EITHER
- *   - q`SELECT ... ${val}`               (tagged template)
- *   - q('SELECT $1', [val])              (text + params)
- * Retourne toujours T[].
+ * qOVE : exécute une requête SQL en mode:
+ *   - tagged template: qOVE`SELECT * FROM t WHERE id = ${id}`
+ *   - texte + params : qOVE("SELECT * FROM t WHERE id = $1", [id])
+ * Retourne toujours un tableau de lignes (T[]).
  */
-export async function q<T = any>(
-  strings: TemplateStringsArray,
+export async function qOVE<T extends Row = Row>(
+  textOrTpl: string | TemplateStringsArray,
   ...values: any[]
-): Promise<T[]>;
-export async function q<T = any>(text: string, params?: any[]): Promise<T[]>;
-export async function q<T = any>(first: any, ...rest: any[]): Promise<T[]> {
-  // Cas 1: tagged template
-  if (Array.isArray(first) && 'raw' in first) {
-    const strings = first as TemplateStringsArray;
-    return (sqlTag as any)(strings, ...rest) as Promise<T[]>;
+): Promise<T[]> {
+  // Mode "tagged template"
+  if (Array.isArray(textOrTpl) && "raw" in textOrTpl) {
+    const rows = await (sql as any)<T>(textOrTpl as any, ...values);
+    // sql`...` retourne déjà T[]
+    return rows as T[];
   }
 
-  // Cas 2: text + params
-  const text = String(first);
-  const params = (rest && rest[0]) as any[] | undefined;
-
-  const client = new Client(OVE_DB_URL);
-  await client.connect();
-  try {
-    const r = await client.query(text, params ?? []);
-    return (r.rows as unknown) as T[];
-  } finally {
-    await client.end();
-  }
+  // Mode "texte + params"
+  const text = textOrTpl as string;
+  const params = (values[0] ?? []) as any[];
+  const res = await (sql as any).query<T>(text, params);
+  // .query() retourne { rows: T[] }
+  return (res?.rows ?? []) as T[];
 }
+
+/** Renvoie une seule ligne (ou null) */
+export async function oneOVE<T extends Row = Row>(
+  textOrTpl: string | TemplateStringsArray,
+  ...values: any[]
+): Promise<T | null> {
+  const rows = await qOVE<T>(textOrTpl, ...values);
+  return rows[0] ?? null;
+}
+
+export { sql as rawSqlOVE };
