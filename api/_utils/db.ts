@@ -1,2 +1,3 @@
-// shim de compatibilité : expose "q" à partir de dbOVE
-export { qOVE as q } from "./dbOVE";
+// api/_utils/db.ts
+// Shim de compatibilité : ré-exporte la bonne fonction
+export { q } from "./dbOVE";
