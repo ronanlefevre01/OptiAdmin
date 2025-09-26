@@ -2,7 +2,7 @@
 import { neon } from '@neondatabase/serverless';
 
 const connStr =
-  process.env.DATABASE_URL_OVE || process.env.DATABASE_URL || '';
+  process.env.OVE_DATABASE_URL || process.env.DATABASE_URL || '';
 
 if (!connStr) {
   throw new Error('Missing DATABASE_URL_OVE or DATABASE_URL');
