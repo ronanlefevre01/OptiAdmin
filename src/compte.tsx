@@ -1,10 +1,10 @@
-// src/compte.tsx
 import React from "react";
-import { createRoot } from "react-dom/client";
-import AccountClientPortal from "./components/AccountClientPortal"; // <= adapte si besoin
-import "./index.css"; // si tu as des styles globaux
+import ReactDOM from "react-dom/client";
+import AccountClientPortal from "./components/AccountClientPortal"; // ajuste le chemin si besoin
+import "./index.css"; // optionnel si tu as des styles globaux
 
-createRoot(document.getElementById("root")!).render(
+const root = document.getElementById("root-compte")!;
+ReactDOM.createRoot(root).render(
   <React.StrictMode>
     <AccountClientPortal apiBase="/api" />
   </React.StrictMode>
