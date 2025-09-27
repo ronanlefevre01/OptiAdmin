@@ -15,7 +15,7 @@ function getOVESecret(): string {
   return secret;
 }
 
-/** Signe un JWT avec OVE_JWT_SECRET */
+// Signe le JWT (par défaut 7 jours)
 export function signJwtOVE(
   payload: OVEJwtPayload,
   options?: SignOptions
@@ -24,16 +24,28 @@ export function signJwtOVE(
   return jwt.sign(payload, getOVESecret(), opts);
 }
 
-/** Vérifie le JWT (Authorization: Bearer <token>) et renvoie son payload */
+// >>> IMPORTANT: TOUJOURS jeter "unauthorized" si problème
 export function requireJwtOVE(authorization?: string): OVEJwtPayload {
   const auth = (authorization || "").trim();
   const [scheme, token] = auth.split(" ");
-  if (!token || scheme.toLowerCase() !== "bearer") throw new Error("unauthorized");
+  if (!token || scheme?.toLowerCase() !== "bearer") {
+    throw new Error("unauthorized");
+  }
 
-  const decoded = jwt.verify(token, getOVESecret());
-  if (typeof decoded === "string") throw new Error("invalid_token");
+  let decoded: unknown;
+  try {
+    decoded = jwt.verify(token, getOVESecret());
+  } catch {
+    throw new Error("unauthorized");
+  }
 
-  const p = decoded as JwtPayload & OVEJwtPayload;
-  if (!p.member_id || !p.tenant_id) throw new Error("invalid_token");
-  return p;
+  if (
+    typeof decoded === "string" ||
+    !(decoded as any)?.member_id ||
+    !(decoded as any)?.tenant_id
+  ) {
+    throw new Error("unauthorized");
+  }
+
+  return decoded as OVEJwtPayload;
 }

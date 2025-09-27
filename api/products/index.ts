@@ -21,7 +21,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
 
     // JWT obligatoire
-    const user = requireJwt(req.headers.authorization);
+    const user = requireJwt(req.headers.authorization as string);
 
     // Query params
     const qParam = (req.query.q as string | undefined)?.trim() ?? '';
@@ -32,42 +32,82 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const size = Math.min(Math.max(parseInt(String(req.query.pageSize ?? '24'), 10) || 24, 1), 100);
     const offset = (page - 1) * size;
 
-    // Conditions dynamiques
-    const conds: string[] = ['tenant_id = $1'];
-    const vals: any[] = [user.tenant_id];
-    let i = 2;
+    const likeQ = `%${qParam}%`;
 
-    if (qParam) {
-      conds.push(`(name ILIKE $${i} OR sku ILIKE $${i} OR COALESCE(description,'') ILIKE $${i})`);
-      vals.push(`%${qParam}%`);
-      i++;
-    }
-    if (cat) {
-      conds.push(`category ILIKE $${i}`);
-      vals.push(cat);
-      i++;
-    }
+    let items: Product[];
+    let countRows: { count: string }[];
 
-    // Requêtes (items + total)
-    const [items, countRows] = await Promise.all([
-      q<Product>(
-        `SELECT id, sku, name, description, price_cents, category, image_url
-           FROM public.products
-          WHERE ${conds.join(' AND ')}
-          ORDER BY name ASC
-          LIMIT $${i} OFFSET $${i + 1}`,
-        [...vals, size, offset]
-      ),
-      q<{ count: string }>(
-        `SELECT COUNT(*)::text AS count
-           FROM public.products
-          WHERE ${conds.join(' AND ')}`,
-        vals
-      ),
-    ]);
+    if (qParam && cat) {
+      // q + category
+      items = await q`
+        SELECT id, sku, name, description, price_cents, category, image_url
+        FROM public.products
+        WHERE tenant_id = ${user.tenant_id}
+          AND (name ILIKE ${likeQ} OR sku ILIKE ${likeQ} OR COALESCE(description,'') ILIKE ${likeQ})
+          AND category ILIKE ${cat}
+        ORDER BY name ASC
+        LIMIT ${size} OFFSET ${offset}
+      ` as Product[];
+
+      countRows = await q`
+        SELECT COUNT(*)::text AS count
+        FROM public.products
+        WHERE tenant_id = ${user.tenant_id}
+          AND (name ILIKE ${likeQ} OR sku ILIKE ${likeQ} OR COALESCE(description,'') ILIKE ${likeQ})
+          AND category ILIKE ${cat}
+      ` as { count: string }[];
+    } else if (qParam && !cat) {
+      // q seul
+      items = await q`
+        SELECT id, sku, name, description, price_cents, category, image_url
+        FROM public.products
+        WHERE tenant_id = ${user.tenant_id}
+          AND (name ILIKE ${likeQ} OR sku ILIKE ${likeQ} OR COALESCE(description,'') ILIKE ${likeQ})
+        ORDER BY name ASC
+        LIMIT ${size} OFFSET ${offset}
+      ` as Product[];
+
+      countRows = await q`
+        SELECT COUNT(*)::text AS count
+        FROM public.products
+        WHERE tenant_id = ${user.tenant_id}
+          AND (name ILIKE ${likeQ} OR sku ILIKE ${likeQ} OR COALESCE(description,'') ILIKE ${likeQ})
+      ` as { count: string }[];
+    } else if (!qParam && cat) {
+      // category seule
+      items = await q`
+        SELECT id, sku, name, description, price_cents, category, image_url
+        FROM public.products
+        WHERE tenant_id = ${user.tenant_id}
+          AND category ILIKE ${cat}
+        ORDER BY name ASC
+        LIMIT ${size} OFFSET ${offset}
+      ` as Product[];
+
+      countRows = await q`
+        SELECT COUNT(*)::text AS count
+        FROM public.products
+        WHERE tenant_id = ${user.tenant_id}
+          AND category ILIKE ${cat}
+      ` as { count: string }[];
+    } else {
+      // ni q ni category
+      items = await q`
+        SELECT id, sku, name, description, price_cents, category, image_url
+        FROM public.products
+        WHERE tenant_id = ${user.tenant_id}
+        ORDER BY name ASC
+        LIMIT ${size} OFFSET ${offset}
+      ` as Product[];
+
+      countRows = await q`
+        SELECT COUNT(*)::text AS count
+        FROM public.products
+        WHERE tenant_id = ${user.tenant_id}
+      ` as { count: string }[];
+    }
 
     const total = Number(countRows[0]?.count ?? 0);
-
     return res.status(200).json({ page, pageSize: size, total, items });
   } catch (e: any) {
     console.error('GET /api/products error:', e);

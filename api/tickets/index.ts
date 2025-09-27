@@ -16,9 +16,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(req, res);
 
   try {
-    const user = requireJwt(req.headers.authorization);
+    const user = requireJwt(req.headers.authorization as string);
 
-    // GET /api/tickets?status=open|closed|...
+    // ---------- GET /api/tickets?status=... ----------
     if (req.method === 'GET') {
       const statusFilter = String(req.query.status ?? '').trim().toLowerCase();
 
@@ -26,39 +26,50 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const size = Math.min(Math.max(parseInt(String(req.query.pageSize ?? '50'), 10) || 50, 1), 100);
       const offset = (page - 1) * size;
 
-      const conds: string[] = ['tenant_id = $1', 'member_id = $2'];
-      const vals: any[] = [user.tenant_id, user.member_id];
-      let i = 3;
+      let items: TicketRow[];
+      let countRows: { count: string }[];
 
       if (statusFilter) {
-        conds.push(`LOWER(status) = $${i}`);
-        vals.push(statusFilter);
-        i++;
+        items = await q`
+          SELECT id, subject, status, order_id, created_at
+          FROM public.tickets
+          WHERE tenant_id = ${user.tenant_id}
+            AND member_id = ${user.member_id}
+            AND LOWER(status) = ${statusFilter}
+          ORDER BY created_at DESC
+          LIMIT ${size} OFFSET ${offset}
+        ` as TicketRow[];
+
+        countRows = await q`
+          SELECT COUNT(*)::text AS count
+          FROM public.tickets
+          WHERE tenant_id = ${user.tenant_id}
+            AND member_id = ${user.member_id}
+            AND LOWER(status) = ${statusFilter}
+        ` as { count: string }[];
+      } else {
+        items = await q`
+          SELECT id, subject, status, order_id, created_at
+          FROM public.tickets
+          WHERE tenant_id = ${user.tenant_id}
+            AND member_id = ${user.member_id}
+          ORDER BY created_at DESC
+          LIMIT ${size} OFFSET ${offset}
+        ` as TicketRow[];
+
+        countRows = await q`
+          SELECT COUNT(*)::text AS count
+          FROM public.tickets
+          WHERE tenant_id = ${user.tenant_id}
+            AND member_id = ${user.member_id}
+        ` as { count: string }[];
       }
 
-      const [items, countRows] = await Promise.all([
-        q<TicketRow>(
-          `SELECT id, subject, status, order_id, created_at
-             FROM public.tickets
-            WHERE ${conds.join(' AND ')}
-            ORDER BY created_at DESC
-            LIMIT $${i} OFFSET $${i + 1}`,
-          [...vals, size, offset]
-        ),
-        q<{ count: string }>(
-          `SELECT COUNT(*)::text AS count
-             FROM public.tickets
-            WHERE ${conds.join(' AND ')}`,
-          vals
-        ),
-      ]);
-
       const total = Number(countRows[0]?.count ?? 0);
-
       return res.status(200).json({ page, pageSize: size, total, items });
     }
 
-    // POST /api/tickets  (body: { orderId?, subject, message })
+    // ---------- POST /api/tickets (body: { orderId?, subject, message }) ----------
     if (req.method === 'POST') {
       const { orderId, subject, message } = (req.body ?? {}) as {
         orderId?: string;
@@ -71,31 +82,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!cleanSubject || !cleanMessage) return res.status(400).json({ error: 'missing_fields' });
 
       if (orderId) {
-        const exists = await q<{ id: string }>(
-          `SELECT id
-             FROM public.orders
-            WHERE id = $1 AND tenant_id = $2 AND member_id = $3
-            LIMIT 1`,
-          [orderId, user.tenant_id, user.member_id]
-        );
+        const exists = await q`
+          SELECT id
+          FROM public.orders
+          WHERE id = ${orderId}
+            AND tenant_id = ${user.tenant_id}
+            AND member_id = ${user.member_id}
+          LIMIT 1
+        ` as { id: string }[];
         if (!exists.length) return res.status(404).json({ error: 'order_not_found' });
       }
 
-      const created = await q<{ id: string }>(
-        `INSERT INTO public.tickets (tenant_id, member_id, order_id, subject, status)
-         VALUES ($1, $2, $3, $4, 'open')
-         RETURNING id`,
-        [user.tenant_id, user.member_id, orderId || null, cleanSubject]
-      );
+      const created = await q`
+        INSERT INTO public.tickets (tenant_id, member_id, order_id, subject, status)
+        VALUES (${user.tenant_id}, ${user.member_id}, ${orderId || null}, ${cleanSubject}, 'open')
+        RETURNING id
+      ` as { id: string }[];
 
       const ticketId = created[0]?.id;
 
-      // // Optionnel si table tickets_messages
-      // await q(
-      //   `INSERT INTO public.tickets_messages (ticket_id, member_id, author_role, body)
-      //     VALUES ($1, $2, 'client', $3)`,
-      //   [ticketId, user.member_id, cleanMessage]
-      // );
+      // // Optionnel, si tu as la table tickets_messages :
+      // await q`
+      //   INSERT INTO public.tickets_messages (ticket_id, member_id, author_role, body)
+      //   VALUES (${ticketId}, ${user.member_id}, 'client', ${cleanMessage})
+      // `;
 
       return res.status(201).json({ id: ticketId });
     }

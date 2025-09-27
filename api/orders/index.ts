@@ -24,36 +24,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(req, res);
 
   try {
-    const user = requireJwt(req.headers.authorization);
+    // JWT (util OVE)
+    const user = requireJwt(req.headers.authorization as string);
 
-    // GET /api/orders
+    // ---------- GET /api/orders ----------
     if (req.method === 'GET') {
       const page = Math.max(parseInt(String(req.query.page ?? '1'), 10) || 1, 1);
       const size = Math.min(Math.max(parseInt(String(req.query.pageSize ?? '50'), 10) || 50, 1), 100);
       const offset = (page - 1) * size;
 
-      const [items, countRows] = await Promise.all([
-        q<OrderRow>(
-          `SELECT id, number, status, total_cents, created_at
-             FROM public.orders
-            WHERE tenant_id = $1 AND member_id = $2
-            ORDER BY created_at DESC
-            LIMIT $3 OFFSET $4`,
-          [user.tenant_id, user.member_id, size, offset]
-        ),
-        q<{ count: string }>(
-          `SELECT COUNT(*)::text AS count
-             FROM public.orders
-            WHERE tenant_id = $1 AND member_id = $2`,
-          [user.tenant_id, user.member_id]
-        ),
-      ]);
+      const items = await q`
+        SELECT id, number, status, total_cents, created_at
+        FROM public.orders
+        WHERE tenant_id = ${user.tenant_id} AND member_id = ${user.member_id}
+        ORDER BY created_at DESC
+        LIMIT ${size} OFFSET ${offset}
+      ` as OrderRow[];
+
+      const countRows = await q`
+        SELECT COUNT(*)::text AS count
+        FROM public.orders
+        WHERE tenant_id = ${user.tenant_id} AND member_id = ${user.member_id}
+      ` as { count: string }[];
 
       const total = Number(countRows[0]?.count ?? 0);
       return res.status(200).json({ page, pageSize: size, total, items });
     }
 
-    // POST /api/orders
+    // ---------- POST /api/orders ----------
     if (req.method === 'POST') {
       const body = (req.body ?? {}) as {
         items?: NewItem[];
@@ -69,6 +67,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (!items.length) return res.status(400).json({ error: 'items_required' });
 
+      // calcule total
       let itemsTotal = 0;
       for (const it of items) {
         const qty = Math.max(0, Math.trunc(Number(it.qty ?? 0)));
@@ -78,14 +77,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       const total = itemsTotal + shippingCents;
 
-      const inserted = await q<{ id: string }>(
-        `INSERT INTO public.orders (tenant_id, member_id, number, status, total_cents, notes)
-         VALUES ($1, $2, concat('O', extract(epoch from now())::bigint), 'pending', $3, $4)
-         RETURNING id`,
-        [user.tenant_id, user.member_id, total, notes]
-      );
-      const orderId = inserted[0].id;
+      const inserted = await q`
+        INSERT INTO public.orders (tenant_id, member_id, number, status, total_cents, notes)
+        VALUES (${user.tenant_id}, ${user.member_id},
+                concat('O', extract(epoch from now())::bigint),
+                'pending', ${total}, ${notes})
+        RETURNING id
+      ` as { id: string }[];
 
+      const orderId = inserted[0].id;
       return res.status(201).json({ id: orderId });
     }
 
