@@ -4,44 +4,30 @@ import {
   setCorsOVE as setCors,
   handleOptionsOVE as handleOptions,
 } from "../../_utils/corsOVE";
-import { verifyJwtOVE } from "../../_utils/jwtOVE"; // cf. point 2
-
-function pickToken(req: VercelRequest): string {
-  // 1) Authorization: Bearer xxx
-  const auth = String(req.headers.authorization || "");
-  if (auth.toLowerCase().startsWith("bearer ")) {
-    return auth.slice(7).trim();
-  }
-  // 2) Cookie OVE_SESSION=xxx
-  const cookie = String(req.headers.cookie || "");
-  const m = cookie.match(/(?:^|;\s*)OVE_SESSION=([^;]+)/);
-  return m ? decodeURIComponent(m[1]) : "";
-}
+import { requireJwtFromReq } from "../../_utils/jwtOVE";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "OPTIONS") return handleOptions(req, res);
-  setCors(req, res);                // Access-Control-Allow-Credentials: true + Origin exact
-  res.setHeader("Vary", "Origin");  // anti cache foireux
+  setCors(req, res);               // doit mettre Access-Control-Allow-Credentials: true + Origin reflété
+  res.setHeader("Vary", "Origin"); // éviter les caches partagés
+  res.setHeader("Cache-Control", "no-store");
 
   try {
     if (req.method !== "GET") return res.status(405).json({ error: "method_not_allowed" });
 
-    const token = pickToken(req);
-    if (!token) return res.status(401).json({ error: "unauthorized" });
-
-    const payload = verifyJwtOVE(token); // { member_id, tenant_id, role }
-    if (!payload?.member_id) return res.status(401).json({ error: "unauthorized" });
-
+    const claims = requireJwtFromReq(req); // lit cookie OVE_SESSION OU Authorization: Bearer
     return res.status(200).json({
       ok: true,
       user: {
-        id: payload.member_id,
-        tenant_id: payload.tenant_id,
-        role: payload.role,
+        id: claims.member_id,
+        tenant_id: claims.tenant_id,
+        role: claims.role,
       },
     });
   } catch (e: any) {
-    console.error("API /site-ove/auth/me error:", e?.message || e);
-    return res.status(401).json({ error: "unauthorized" });
+    const msg = String(e?.message || "");
+    // secret manquant => 500 ; sinon 401
+    const status = msg === "ove_jwt_secret_missing" ? 500 : 401;
+    return res.status(status).json({ error: "unauthorized" });
   }
 }
