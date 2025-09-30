@@ -1,7 +1,8 @@
+// api/site-ove/tickets/index.ts
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { setCorsOVE as setCors, handleOptionsOVE as handleOptions } from '../../_utils/corsOVE';
 import { qOVE as q } from '../../_utils/dbOVE';
-import { requireJwtOVE as requireJwt } from '../../_utils/jwtOVE';
+import { requireJwtFromReq } from '../../_utils/jwtOVE';
 
 type TicketRow = {
   id: string;
@@ -16,9 +17,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(req, res);
 
   try {
-    const user = requireJwt(req.headers.authorization as string);
+    // ✅ JWT depuis cookie OVE_SESSION ou Authorization: Bearer
+    const user = requireJwtFromReq(req);
 
-    // ---------- GET /api/tickets?status=... ----------
+    // ---------- GET /api/site-ove/tickets?status=... ----------
     if (req.method === 'GET') {
       const statusFilter = String(req.query.status ?? '').trim().toLowerCase();
 
@@ -30,7 +32,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       let countRows: { count: string }[];
 
       if (statusFilter) {
-        items = await q`
+        items = (await q`
           SELECT id, subject, status, order_id, created_at
           FROM public.tickets
           WHERE tenant_id = ${user.tenant_id}
@@ -38,38 +40,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             AND LOWER(status) = ${statusFilter}
           ORDER BY created_at DESC
           LIMIT ${size} OFFSET ${offset}
-        ` as TicketRow[];
+        `) as TicketRow[];
 
-        countRows = await q`
+        countRows = (await q`
           SELECT COUNT(*)::text AS count
           FROM public.tickets
           WHERE tenant_id = ${user.tenant_id}
             AND member_id = ${user.member_id}
             AND LOWER(status) = ${statusFilter}
-        ` as { count: string }[];
+        `) as { count: string }[];
       } else {
-        items = await q`
+        items = (await q`
           SELECT id, subject, status, order_id, created_at
           FROM public.tickets
           WHERE tenant_id = ${user.tenant_id}
             AND member_id = ${user.member_id}
           ORDER BY created_at DESC
           LIMIT ${size} OFFSET ${offset}
-        ` as TicketRow[];
+        `) as TicketRow[];
 
-        countRows = await q`
+        countRows = (await q`
           SELECT COUNT(*)::text AS count
           FROM public.tickets
           WHERE tenant_id = ${user.tenant_id}
             AND member_id = ${user.member_id}
-        ` as { count: string }[];
+        `) as { count: string }[];
       }
 
       const total = Number(countRows[0]?.count ?? 0);
       return res.status(200).json({ page, pageSize: size, total, items });
     }
 
-    // ---------- POST /api/tickets (body: { orderId?, subject, message }) ----------
+    // ---------- POST /api/site-ove/tickets (body: { orderId?, subject, message }) ----------
     if (req.method === 'POST') {
       const { orderId, subject, message } = (req.body ?? {}) as {
         orderId?: string;
@@ -82,22 +84,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!cleanSubject || !cleanMessage) return res.status(400).json({ error: 'missing_fields' });
 
       if (orderId) {
-        const exists = await q`
+        const exists = (await q`
           SELECT id
           FROM public.orders
           WHERE id = ${orderId}
             AND tenant_id = ${user.tenant_id}
             AND member_id = ${user.member_id}
           LIMIT 1
-        ` as { id: string }[];
+        `) as { id: string }[];
         if (!exists.length) return res.status(404).json({ error: 'order_not_found' });
       }
 
-      const created = await q`
+      const created = (await q`
         INSERT INTO public.tickets (tenant_id, member_id, order_id, subject, status)
         VALUES (${user.tenant_id}, ${user.member_id}, ${orderId || null}, ${cleanSubject}, 'open')
         RETURNING id
-      ` as { id: string }[];
+      `) as { id: string }[];
 
       const ticketId = created[0]?.id;
 
@@ -112,7 +114,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(405).json({ error: 'method_not_allowed' });
   } catch (e: any) {
-    console.error('API /tickets error:', e);
+    console.error('API /site-ove/tickets error:', e);
     const status = e?.message === 'unauthorized' ? 401 : 500;
     return res.status(status).json({ error: e?.message || 'server_error' });
   }

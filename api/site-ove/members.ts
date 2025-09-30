@@ -1,11 +1,11 @@
 // /api/site-ove/members.ts (Neon + JWT OVE)
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { qOVE as q } from "../_utils/dbOVE";
+import { qOVE as q } from "../../_utils/dbOVE";
 import {
   setCorsOVE as setCors,
   handleOptionsOVE as handleOptions,
-} from "../_utils/corsOVE";
-import { requireJwtOVE as requireJwt } from "../_utils/jwtOVE";
+} from "../../_utils/corsOVE";
+import { requireJwtFromReq } from "../../_utils/jwtOVE";
 import bcrypt from "bcryptjs";
 
 type MemberRow = {
@@ -37,22 +37,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(req, res);
 
   try {
-    // On accepte OVE_ADMIN_API_KEY (prioritaire) ou ADMIN_API_KEY
-    const adminKey = (process.env.OVE_ADMIN_API_KEY || process.env.ADMIN_API_KEY || "").trim();
+    // On accepte plusieurs noms de variables pour la clé admin côté serveur
+    const adminKeyEnv =
+      (process.env.OVE_ADMIN_KEY ||
+        process.env.OVE_ADMIN_API_KEY ||
+        process.env.ADMIN_API_KEY ||
+        "").trim();
+
+    // Clé admin fournie par le client (header ou query)
     const h = req.headers["x-admin-key"];
     const incomingHeader = Array.isArray(h) ? (h[0] ?? "").trim() : String(h ?? "").trim();
     const incomingQuery = String((req.query?.admin_key as string) ?? "").trim();
     const providedKey = incomingHeader || incomingQuery;
-    const fromAdmin = !!adminKey && providedKey === adminKey;
+
+    const fromAdmin = !!adminKeyEnv && providedKey === adminKeyEnv;
     const adminKeyWasProvided = !!providedKey;
-    if (adminKeyWasProvided && !fromAdmin)
+    if (adminKeyWasProvided && !fromAdmin) {
       return res.status(401).json({ error: "bad_admin_key" });
+    }
 
     // ---------- GET ----------
     if (req.method === "GET") {
       const tenantId = fromAdmin
         ? String(req.query.tenant_id || process.env.OVE_TENANT_ID || "").trim()
-        : requireJwt(req.headers.authorization).tenant_id;
+        : requireJwtFromReq(req).tenant_id;
 
       if (!tenantId) return res.status(400).json({ error: "missing_tenant_id" });
 
@@ -72,7 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         tenantId = (req.body?.tenant_id as string) || process.env.OVE_TENANT_ID || "";
         if (!tenantId) return res.status(400).json({ error: "missing_tenant_id" });
       } else {
-        const u = requireJwt(req.headers.authorization);
+        const u = requireJwtFromReq(req);
         tenantId = u.tenant_id;
       }
 

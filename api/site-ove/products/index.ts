@@ -1,7 +1,8 @@
+// api/site-ove/products/index.ts
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { setCorsOVE as setCors, handleOptionsOVE as handleOptions } from '../../_utils/corsOVE';
 import { qOVE as q } from '../../_utils/dbOVE';
-import { requireJwtOVE as requireJwt } from '../../_utils/jwtOVE';
+import { requireJwtFromReq } from '../../_utils/jwtOVE';
 
 type Product = {
   id: string;
@@ -20,8 +21,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
 
-    // JWT obligatoire
-    const user = requireJwt(req.headers.authorization as string);
+    // ✅ JWT depuis cookie OVE_SESSION ou header Bearer
+    const user = requireJwtFromReq(req);
 
     // Query params
     const qParam = (req.query.q as string | undefined)?.trim() ?? '';
@@ -38,8 +39,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let countRows: { count: string }[];
 
     if (qParam && cat) {
-      // q + category
-      items = await q`
+      items = (await q`
         SELECT id, sku, name, description, price_cents, category, image_url
         FROM public.products
         WHERE tenant_id = ${user.tenant_id}
@@ -47,70 +47,67 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           AND category ILIKE ${cat}
         ORDER BY name ASC
         LIMIT ${size} OFFSET ${offset}
-      ` as Product[];
+      `) as Product[];
 
-      countRows = await q`
+      countRows = (await q`
         SELECT COUNT(*)::text AS count
         FROM public.products
         WHERE tenant_id = ${user.tenant_id}
           AND (name ILIKE ${likeQ} OR sku ILIKE ${likeQ} OR COALESCE(description,'') ILIKE ${likeQ})
           AND category ILIKE ${cat}
-      ` as { count: string }[];
+      `) as { count: string }[];
     } else if (qParam && !cat) {
-      // q seul
-      items = await q`
+      items = (await q`
         SELECT id, sku, name, description, price_cents, category, image_url
         FROM public.products
         WHERE tenant_id = ${user.tenant_id}
           AND (name ILIKE ${likeQ} OR sku ILIKE ${likeQ} OR COALESCE(description,'') ILIKE ${likeQ})
         ORDER BY name ASC
         LIMIT ${size} OFFSET ${offset}
-      ` as Product[];
+      `) as Product[];
 
-      countRows = await q`
+      countRows = (await q`
         SELECT COUNT(*)::text AS count
         FROM public.products
         WHERE tenant_id = ${user.tenant_id}
           AND (name ILIKE ${likeQ} OR sku ILIKE ${likeQ} OR COALESCE(description,'') ILIKE ${likeQ})
-      ` as { count: string }[];
+      `) as { count: string }[];
     } else if (!qParam && cat) {
-      // category seule
-      items = await q`
+      items = (await q`
         SELECT id, sku, name, description, price_cents, category, image_url
         FROM public.products
         WHERE tenant_id = ${user.tenant_id}
           AND category ILIKE ${cat}
         ORDER BY name ASC
         LIMIT ${size} OFFSET ${offset}
-      ` as Product[];
+      `) as Product[];
 
-      countRows = await q`
+      countRows = (await q`
         SELECT COUNT(*)::text AS count
         FROM public.products
         WHERE tenant_id = ${user.tenant_id}
           AND category ILIKE ${cat}
-      ` as { count: string }[];
+      `) as { count: string }[];
     } else {
-      // ni q ni category
-      items = await q`
+      items = (await q`
         SELECT id, sku, name, description, price_cents, category, image_url
         FROM public.products
         WHERE tenant_id = ${user.tenant_id}
         ORDER BY name ASC
         LIMIT ${size} OFFSET ${offset}
-      ` as Product[];
+      `) as Product[];
 
-      countRows = await q`
+      countRows = (await q`
         SELECT COUNT(*)::text AS count
         FROM public.products
         WHERE tenant_id = ${user.tenant_id}
-      ` as { count: string }[];
+      `) as { count: string }[];
     }
 
     const total = Number(countRows[0]?.count ?? 0);
     return res.status(200).json({ page, pageSize: size, total, items });
   } catch (e: any) {
-    console.error('GET /api/products error:', e);
+    console.error('API /site-ove/products error:', e);
     const status = e?.message === 'unauthorized' ? 401 : 500;
     return res.status(status).json({ error: e?.message || 'server_error' });
   }
