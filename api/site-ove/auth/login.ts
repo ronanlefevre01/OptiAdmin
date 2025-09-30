@@ -1,81 +1,62 @@
-// api/site-ove/auth/login.ts
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { setCorsOVE as setCors, handleOptionsOVE as handleOptions } from '../../_utils/corsOVE';
-import { qOVE as q } from '../../_utils/dbOVE';
-import bcrypt from 'bcryptjs';
-import { signJwtOVE } from '../../_utils/jwtOVE';
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { setCorsOVE as setCors, handleOptionsOVE as handleOptions } from "../../_utils/corsOVE";
+import { qOVE as q } from "../../_utils/dbOVE";
+import { signJwtOVE } from "../../_utils/jwtOVE";
+import bcrypt from "bcryptjs";
 
-type Member = {
+type Row = {
   id: string;
   tenant_id: string;
   email: string;
   name: string | null;
-  role: 'client' | 'admin' | 'demo';
+  role: "client" | "admin" | "demo";
   enabled: boolean;
-  password_hash: string;
+  password_hash: string | null;
 };
 
+function setSessionCookie(res: VercelResponse, token: string) {
+  const maxAge = 60 * 60 * 24 * 7; // 7 jours
+  res.setHeader("Set-Cookie", [
+    `OVE_SESSION=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=${maxAge}`,
+    // compat optionnelle si tu lis encore le token côté client
+    `OVE_JWT=${encodeURIComponent(token)}; Path=/; Secure; SameSite=None; Max-Age=${maxAge}`,
+  ]);
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method === 'OPTIONS') return handleOptions(req, res);
+  if (req.method === "OPTIONS") return handleOptions(req, res);
   setCors(req, res);
 
   try {
-    if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
+    if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
 
-    const { email, password, tenant_id } = (req.body ?? {}) as {
-      email?: string;
-      password?: string;
-      tenant_id?: string;
-    };
+    const email = String(req.body?.email ?? "").trim().toLowerCase();
+    const password = String(req.body?.password ?? "");
 
-    const tenantId = String(tenant_id || process.env.OVE_TENANT_ID || '').trim();
-    const mail = String(email ?? '').trim().toLowerCase();
-    const pass = String(password ?? '');
+    if (!email || !password) return res.status(400).json({ error: "missing_credentials" });
 
-    if (!tenantId || !mail || !pass) return res.status(400).json({ error: 'missing_fields' });
-
-    // 1) Vérifie le tenant
-    const t = await q<{ id: string }>`
-      SELECT id FROM public.tenants WHERE id = ${tenantId} LIMIT 1
-    `;
-    if (!t.length) return res.status(400).json({ error: 'unknown_tenant' });
-
-    // 2) Récupère le membre actif
-    const m = await q<Member>`
+    const rows = await q<Row>`
       SELECT id, tenant_id, email, name, role, enabled, password_hash
-      FROM public.members
-      WHERE tenant_id = ${tenantId}
-        AND email = ${mail}
-        AND enabled = true
-      LIMIT 1
+        FROM public.members
+       WHERE email = ${email}
+       LIMIT 1
     `;
-    const member = m[0];
-    if (!member) return res.status(401).json({ error: 'invalid_credentials' });
+    const m = rows[0];
+    if (!m || !m.enabled || !m.password_hash) return res.status(401).json({ error: "invalid_credentials" });
 
-    // 3) Vérifie le mot de passe
-    const ok = await bcrypt.compare(pass, member.password_hash);
-    if (!ok) return res.status(401).json({ error: 'invalid_credentials' });
+    const ok = await bcrypt.compare(password, m.password_hash);
+    if (!ok) return res.status(401).json({ error: "invalid_credentials" });
 
-    // 4) Signe le JWT OVE + set cookie HttpOnly
-    const token = signJwtOVE({
-      member_id: member.id,
-      tenant_id: member.tenant_id,
-      role: member.role,
-    });
-
-    // Cookie 7 jours
-    res.setHeader(
-      'Set-Cookie',
-      `OVE_JWT=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${60 * 60 * 24 * 7}`
-    );
+    const token = signJwtOVE({ member_id: m.id, tenant_id: m.tenant_id, role: m.role });
+    setSessionCookie(res, token);
 
     return res.status(200).json({
       ok: true,
-      token, // compat localStorage si tu veux
-      member: { id: member.id, email: member.email, name: member.name, role: member.role },
+      token, // compat
+      member: { id: m.id, email: m.email, name: m.name, role: m.role, tenant_id: m.tenant_id },
     });
   } catch (e: any) {
-    console.error('API /site-ove/auth/login error:', e);
-    return res.status(500).json({ error: e?.message || 'server_error' });
+    console.error("API /site-ove/auth/login error:", e);
+    return res.status(500).json({ error: e?.message || "server_error" });
   }
 }
