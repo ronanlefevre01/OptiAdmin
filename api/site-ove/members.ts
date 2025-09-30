@@ -1,11 +1,11 @@
 // /api/site-ove/members.ts (Neon + JWT OVE)
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { qOVE as q } from "../../_utils/dbOVE";
+import { qOVE as q } from "../_utils/dbOVE";
 import {
   setCorsOVE as setCors,
   handleOptionsOVE as handleOptions,
-} from "../../_utils/corsOVE";
-import { requireJwtFromReq } from "../../_utils/jwtOVE";
+} from "../_utils/corsOVE";
+import { requireJwtFromReq } from "../_utils/jwtOVE";
 import bcrypt from "bcryptjs";
 
 type MemberRow = {
