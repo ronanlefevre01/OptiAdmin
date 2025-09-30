@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { setCorsOVE as setCors, handleOptionsOVE as handleOptions } from '../_utils/corsOVE';
-import { qOVE as q } from '../_utils/dbOVE';
-import { requireJwtOVE as requireJwt } from '../_utils/jwtOVE';
+import { setCorsOVE as setCors, handleOptionsOVE as handleOptions } from '../../_utils/corsOVE';
+import { qOVE as q } from '../../_utils/dbOVE';
+import { requireJwtOVE as requireJwt } from '../../_utils/jwtOVE';
 
 type Product = {
   id: string;
