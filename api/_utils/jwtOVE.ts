@@ -1,51 +1,46 @@
-// /api/_utils/jwtOVE.ts
-import jwt, { SignOptions, JwtPayload } from "jsonwebtoken";
+import jwt from 'jsonwebtoken';
+import type { VercelRequest } from '@vercel/node';
 
-export type OVEJwtPayload = {
-  member_id: string;
-  tenant_id: string;
-  role: "client" | "admin" | "demo" | string;
-  iat?: number;
-  exp?: number;
-};
+export type OVEClaims = { member_id: string; tenant_id: string; role: string };
 
-function getOVESecret(): string {
+function readCookie(req: VercelRequest, name: string) {
+  const raw = req.headers.cookie || '';
+  const m = raw.match(new RegExp('(?:^|;\\s*)' + name + '=([^;]+)'));
+  return m ? decodeURIComponent(m[1]) : '';
+}
+function getBearer(auth?: string | null) {
+  if (!auth) return '';
+  return auth.startsWith('Bearer ') ? auth.slice(7) : auth;
+}
+
+export function signJwtOVE(payload: OVEClaims) {
   const secret = process.env.OVE_JWT_SECRET;
-  if (!secret) throw new Error("ove_jwt_secret_missing");
-  return secret;
+  if (!secret) throw new Error('ove_jwt_secret_missing');
+  return jwt.sign(payload, secret, { expiresIn: '7d' });
 }
 
-// Signe le JWT (par défaut 7 jours)
-export function signJwtOVE(
-  payload: OVEJwtPayload,
-  options?: SignOptions
-): string {
-  const opts: SignOptions = { expiresIn: "7d", ...(options || {}) };
-  return jwt.sign(payload, getOVESecret(), opts);
+export function requireJwtFromReq(req: VercelRequest): OVEClaims {
+  const secret = process.env.OVE_JWT_SECRET;
+  if (!secret) throw new Error('ove_jwt_secret_missing');
+
+  // 1) Cookie HttpOnly (recommandé)
+  const cookieToken = readCookie(req, 'OVE_SESSION');
+  // 2) Ou Authorization: Bearer ...
+  const bearerToken = getBearer(req.headers.authorization);
+
+  const token = cookieToken || bearerToken;
+  if (!token) throw new Error('unauthorized');
+
+  return jwt.verify(token, secret) as OVEClaims;
 }
 
-// >>> IMPORTANT: TOUJOURS jeter "unauthorized" si problème
-export function requireJwtOVE(authorization?: string): OVEJwtPayload {
-  const auth = (authorization || "").trim();
-  const [scheme, token] = auth.split(" ");
-  if (!token || scheme?.toLowerCase() !== "bearer") {
-    throw new Error("unauthorized");
+/** Bypass admin pour tester: X-Admin-Key + X-Tenant-Id */
+export function requireUserOrAdmin(req: VercelRequest): OVEClaims {
+  const adminKey = String(req.headers['x-admin-key'] || '');
+  if (adminKey && adminKey === process.env.OVE_ADMIN_KEY) {
+    const tenant = String(req.headers['x-tenant-id'] || process.env.OVE_TENANT_ID || '');
+    if (!tenant) throw new Error('tenant_missing');
+    return { member_id: 'admin-bypass', tenant_id: tenant, role: 'admin' };
   }
-
-  let decoded: unknown;
-  try {
-    decoded = jwt.verify(token, getOVESecret());
-  } catch {
-    throw new Error("unauthorized");
-  }
-
-  if (
-    typeof decoded === "string" ||
-    !(decoded as any)?.member_id ||
-    !(decoded as any)?.tenant_id
-  ) {
-    throw new Error("unauthorized");
-  }
-
-  return decoded as OVEJwtPayload;
+  return requireJwtFromReq(req);
 }

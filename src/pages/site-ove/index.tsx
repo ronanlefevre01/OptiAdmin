@@ -23,21 +23,18 @@ type Order = {
 const ADMIN_KEY = import.meta.env.VITE_OVE_ADMIN_KEY || "";
 const TENANT_ID = import.meta.env.VITE_OVE_TENANT_ID || "";
 
-/** Construit l’URL d’API en ajoutant admin_key (& tenant_id) si dispo */
-function withAdminQuery(path: string) {
-  if (!ADMIN_KEY) return path;
-  const sep = path.includes("?") ? "&" : "?";
-  const qTenant = TENANT_ID ? `&tenant_id=${encodeURIComponent(TENANT_ID)}` : "";
-  return `${path}${sep}admin_key=${encodeURIComponent(ADMIN_KEY)}${qTenant}`;
-}
-
-/** Ajoute un header Authorization si un token est présent en localStorage */
-function authHeaders() {
+/** Construit les headers: JWT + Admin Key + Tenant Id (sécurisé, pas dans l’URL) */
+function buildHeaders(extra: Record<string, string> = {}) {
   const token =
-    localStorage.getItem("OVE_TOKEN") ||
-    localStorage.getItem("token") ||
+    localStorage.getItem("OVE_JWT") ||
+    sessionStorage.getItem("OVE_JWT") ||
     "";
-  return token ? { Authorization: `Bearer ${token}` } : {};
+
+  const headers: Record<string, string> = { ...extra };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  if (ADMIN_KEY) headers["X-Admin-Key"] = ADMIN_KEY;
+  if (TENANT_ID) headers["X-Tenant-Id"] = TENANT_ID;
+  return headers;
 }
 
 export default function SiteOVEAdmin() {
@@ -102,8 +99,8 @@ function MembersPanel() {
     (async () => {
       setLoading(true);
       try {
-        const res = await fetch(withAdminQuery("/api/site-ove/members"), {
-          headers: { ...authHeaders() },
+        const res = await fetch("/api/site-ove/members", {
+          headers: buildHeaders(),
         });
         const data = await res.json();
         setMembers(Array.isArray(data) ? data : data.items || []);
@@ -124,19 +121,17 @@ function MembersPanel() {
     let password = form.password.trim();
     if (!password) password = randPassword();
 
-    const payload: any = {
+    const payload = {
       email,
       name: form.name.trim(),
       role: form.role,
       password,
+      // tenant_id NON nécessaire ici: déjà passé en header X-Tenant-Id.
     };
 
-    // en mode admin_key l’API attend tenant_id dans le body
-    if (ADMIN_KEY && TENANT_ID) payload.tenant_id = TENANT_ID;
-
-    const res = await fetch(withAdminQuery("/api/site-ove/members"), {
+    const res = await fetch("/api/site-ove/members", {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
+      headers: buildHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload),
     });
 
@@ -152,16 +147,13 @@ function MembersPanel() {
   }
 
   async function toggleMember(id: string, enabled: boolean) {
-    // (uniquement si /api/site-ove/members/[id] PATCH est implémenté côté API)
-    const res = await fetch(withAdminQuery(`/api/site-ove/members/${id}`), {
+    const res = await fetch(`/api/site-ove/members/${id}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
+      headers: buildHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ enabled }),
     });
     if (res.ok) {
       setMembers((prev) => prev.map((m) => (m.id === id ? { ...m, enabled } : m)));
-    } else {
-      // silencieux si la route n’existe pas
     }
   }
 
@@ -262,8 +254,8 @@ function OrdersPanel() {
     (async () => {
       setLoading(true);
       try {
-        const res = await fetch(withAdminQuery("/api/site-ove/orders"), {
-          headers: { ...authHeaders() },
+        const res = await fetch("/api/site-ove/orders", {
+          headers: buildHeaders(),
         });
         const data = await res.json();
         setOrders(Array.isArray(data) ? data : data.items || []);
@@ -276,9 +268,9 @@ function OrdersPanel() {
   }, []);
 
   async function updateStatus(id: string, status: Order["status"]) {
-    const res = await fetch(withAdminQuery(`/api/site-ove/orders/${id}`), {
+    const res = await fetch(`/api/site-ove/orders/${id}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
+      headers: buildHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ status }),
     });
     if (res.ok) {
