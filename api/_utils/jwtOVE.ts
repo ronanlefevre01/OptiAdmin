@@ -12,18 +12,22 @@ export type OVEClaims = {
 
 /* -------------------- helpers -------------------- */
 
+/** Lit un cookie dans req.headers.cookie (simple, sans dépendance). */
 function readCookie(req: VercelRequest, name: string): string {
   const raw = req.headers?.cookie || "";
   const m = raw.match(new RegExp("(?:^|;\\s*)" + name + "=([^;]+)"));
   return m ? decodeURIComponent(m[1]) : "";
 }
 
+/** Extrait un Bearer token de façon robuste (casse & espaces). */
 function getBearer(auth?: string | null): string {
   if (!auth) return "";
-  return auth.startsWith("Bearer ") ? auth.slice(7) : auth;
+  const m = auth.trim().match(/^Bearer\s+(.+)$/i);
+  return m ? m[1].trim() : "";
 }
 
-function getTokenFromReq(req: VercelRequest): string {
+/** Récupère le token à partir du cookie OVE_SESSION ou du header Authorization. */
+export function getTokenFromReq(req: VercelRequest): string {
   // 1) Cookie HttpOnly recommandé
   const cookieToken = readCookie(req, "OVE_SESSION");
   if (cookieToken) return cookieToken;
@@ -65,12 +69,14 @@ export function requireJwtFromReq(req: VercelRequest): OVEClaims {
  * Autorise :
  *  - un utilisateur authentifié (cookie/bearer)
  *  - OU un bypass admin via headers 'X-Admin-Key' (+ 'X-Tenant-Id' optionnel)
+ *    L'admin key attendue peut être dans OVE_ADMIN_KEY ou OVE_ADMIN_API_KEY.
  */
 export function requireUserOrAdmin(req: VercelRequest): OVEClaims {
-  const adminKey = String(req.headers["x-admin-key"] || "");
-  const expected = process.env.OVE_ADMIN_KEY || "";
+  const adminKeyProvided = String(req.headers["x-admin-key"] || "");
+  const adminKeyExpected =
+    process.env.OVE_ADMIN_KEY || process.env.OVE_ADMIN_API_KEY || "";
 
-  if (adminKey && expected && adminKey === expected) {
+  if (adminKeyProvided && adminKeyExpected && adminKeyProvided === adminKeyExpected) {
     const tenant =
       String(req.headers["x-tenant-id"] || "") ||
       String(process.env.OVE_TENANT_ID || "");
@@ -82,7 +88,7 @@ export function requireUserOrAdmin(req: VercelRequest): OVEClaims {
 }
 
 /* -------------------- aliases de compat -------------------- */
-// Ancien nom utilisé dans les routes
+// Ancien nom utilisé dans certaines routes
 export const requireJwtOVE = requireJwtFromReq;
 // Alias court si tu veux importer { requireJwt }
 export { requireJwtFromReq as requireJwt };
